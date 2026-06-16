@@ -108,9 +108,20 @@ async function enterApp(user) {
   $("#appShell").classList.remove("hidden");
   $("#signedInAs").textContent = user?.name || user?.email || "Investor";
   $("#displayName").value = user?.name || "Investor";
+  setScreen("dashboard");
   await loadPortfolio();
   await loadBrokerageStatus();
   await loadMarketLookups();
+}
+
+async function enterPortfolioOverviewFromPlaceholder() {
+  const placeholderUser = {
+    name: "Google Investor",
+    email: "google@hermes.local",
+    authProvider: "google-placeholder"
+  };
+  await enterApp(placeholderUser);
+  showToast("Google sign-in placeholder opened the portfolio overview.");
 }
 
 async function logout() {
@@ -319,13 +330,11 @@ $("#signupPassword").addEventListener("input", (event) => {
 });
 
 $("#googleLogin").addEventListener("click", async () => {
-  const user = await api("/api/auth/google", { method: "POST" });
-  await enterApp(user);
+  await enterPortfolioOverviewFromPlaceholder();
 });
 
 $("#googleSignup").addEventListener("click", async () => {
-  const user = await api("/api/auth/google", { method: "POST" });
-  await enterApp(user);
+  await enterPortfolioOverviewFromPlaceholder();
 });
 
 $("#loginForm").addEventListener("submit", async (event) => {
