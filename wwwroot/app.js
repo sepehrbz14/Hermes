@@ -94,6 +94,14 @@ async function loadCurrencies() {
   `).join("");
 }
 
+async function loadMarketLookups() {
+  const results = await Promise.allSettled([loadCompanies(), loadCurrencies()]);
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed) {
+    showToast(failed.reason?.message || "Market lookup data could not be loaded right now.");
+  }
+}
+
 async function enterApp(user) {
   state.user = user;
   $("#authShell").classList.add("hidden");
@@ -102,7 +110,7 @@ async function enterApp(user) {
   $("#displayName").value = user?.name || "Investor";
   await loadPortfolio();
   await loadBrokerageStatus();
-  await Promise.all([loadCompanies(), loadCurrencies()]);
+  await loadMarketLookups();
 }
 
 async function logout() {
@@ -440,7 +448,7 @@ $("#displayName").addEventListener("change", async (event) => {
 
 loadPortfolio()
   .then(loadBrokerageStatus)
-  .then(() => Promise.all([loadCompanies(), loadCurrencies()]))
+  .then(loadMarketLookups)
   .then(() => {
     if (state.user) {
       $("#authShell").classList.add("hidden");
