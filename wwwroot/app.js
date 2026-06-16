@@ -89,7 +89,10 @@ async function loadCompanies(query = "") {
 
 async function loadCurrencies() {
   state.currencies = await api("/api/market/currencies");
-  $("#currencyPicker").innerHTML = state.currencies.map((currency) => `
+  const currencyPicker = $("#currencyPicker");
+  if (!currencyPicker) return;
+
+  currencyPicker.innerHTML = state.currencies.map((currency) => `
     <option value="${currency.currencyId}">${escapeHtml(currency.currencyTitle)} (${escapeHtml(currency.currencySymbol)})</option>
   `).join("");
 }
@@ -303,24 +306,27 @@ $("#marketCompanySearch").addEventListener("input", (event) => {
   }, 250);
 });
 
-$("#loadCurrencyValue").addEventListener("click", async (event) => {
-  setBusy(event.currentTarget, true);
-  try {
-    const currencyId = Number($("#currencyPicker").value);
-    const values = await api("/api/market/currencies/values", {
-      method: "POST",
-      body: JSON.stringify({ currencyIds: [currencyId] })
-    });
-    const selected = values[0];
-    $("#currencyCloseValue").value = selected?.currencyCloseValue == null ? "-" : money(selected.currencyCloseValue);
-    $("#currencyUpdatedAt").value = selected?.updatedAt ? new Date(selected.updatedAt).toLocaleString() : "-";
-    showToast("Currency close value loaded.");
-  } catch (error) {
-    showToast(error.message);
-  } finally {
-    setBusy(event.currentTarget, false);
-  }
-});
+const loadCurrencyValueButton = $("#loadCurrencyValue");
+if (loadCurrencyValueButton) {
+  loadCurrencyValueButton.addEventListener("click", async (event) => {
+    setBusy(event.currentTarget, true);
+    try {
+      const currencyId = Number($("#currencyPicker").value);
+      const values = await api("/api/market/currencies/values", {
+        method: "POST",
+        body: JSON.stringify({ currencyIds: [currencyId] })
+      });
+      const selected = values[0];
+      $("#currencyCloseValue").value = selected?.currencyCloseValue == null ? "-" : money(selected.currencyCloseValue);
+      $("#currencyUpdatedAt").value = selected?.updatedAt ? new Date(selected.updatedAt).toLocaleString() : "-";
+      showToast("Currency close value loaded.");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      setBusy(event.currentTarget, false);
+    }
+  });
+}
 
 $("#signupPassword").addEventListener("input", (event) => {
   const score = passwordScore(event.target.value);
