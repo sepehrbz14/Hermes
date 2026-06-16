@@ -1,0 +1,4 @@
+wwwroot\index.html
+wwwroot\app.js
+C:\Users\admin\OneDrive\Documents\Hermes\wwwroot\index.html
+C:\Users\admin\OneDrive\Documents\Hermes\wwwroot\app.js

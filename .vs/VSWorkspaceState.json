@@ -1,0 +1,13 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\.appdata",
+    "\\.dotnet-home",
+    "\\bin",
+    "\\Models",
+    "\\obj",
+    "\\Services",
+    "\\wwwroot"
+  ],
+  "PreviewInSolutionExplorer": false
+}

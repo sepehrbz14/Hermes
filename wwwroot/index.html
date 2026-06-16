@@ -1,0 +1,1196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Horizon Portfolio Manager</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070d1a;
+      --panel: #3a3c40;
+      --panel-soft: #4d5056;
+      --panel-deep: #282b31;
+      --line: #777a80;
+      --muted: #aaa7aa;
+      --text: #f8f8f8;
+      --green: #12ed9f;
+      --cyan: #14cbe6;
+      --lime: #25e75c;
+      --red: #ff5d70;
+      --amber: #f2c45a;
+      --shadow: 0 26px 60px rgba(0, 0, 0, .35);
+      --glow: 0 18px 28px rgba(18, 237, 159, .24), 0 10px 24px rgba(20, 203, 230, .14);
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 10% 0%, rgba(18, 237, 159, .08), transparent 25rem),
+        linear-gradient(180deg, #070d1a 0%, #080d18 54%, #050914 100%);
+      color: var(--text);
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .auth-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) minmax(360px, 636px);
+      align-items: center;
+      gap: clamp(32px, 8vw, 110px);
+      padding: clamp(18px, 5vw, 64px);
+    }
+
+    .brand-stage {
+      min-height: 560px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 34px;
+    }
+
+    .brand-mark {
+      width: 86px;
+      height: 86px;
+      border-radius: 26px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+      color: #041018;
+      font-size: 44px;
+      font-weight: 950;
+      box-shadow: var(--glow);
+    }
+
+    .brand-stage h1 {
+      margin: 0;
+      max-width: 640px;
+      font-size: clamp(58px, 8vw, 108px);
+      line-height: .86;
+      letter-spacing: 0;
+    }
+
+    .brand-stage p {
+      margin: 0;
+      max-width: 560px;
+      color: #c8cbd1;
+      font-size: clamp(18px, 2vw, 24px);
+      line-height: 1.45;
+    }
+
+    .mini-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(120px, 1fr));
+      max-width: 620px;
+      gap: 12px;
+    }
+
+    .mini-metric {
+      border: 1px solid rgba(255, 255, 255, .11);
+      background: rgba(58, 60, 64, .44);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .mini-metric b {
+      display: block;
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .mini-metric span {
+      display: block;
+      color: var(--muted);
+      margin-top: 8px;
+      font-size: 13px;
+    }
+
+    .auth-card {
+      width: min(100%, 636px);
+      margin-left: auto;
+      border-radius: 26px;
+      background: var(--panel);
+      padding: clamp(30px, 4vw, 60px);
+      box-shadow: var(--shadow);
+    }
+
+    .auth-card h2 {
+      margin: 0 0 32px;
+      font-size: clamp(40px, 5vw, 64px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .auth-card.compact {
+      max-width: 448px;
+      padding-top: 70px;
+      padding-bottom: 70px;
+    }
+
+    .auth-card.compact h2 {
+      text-align: center;
+      margin-bottom: 72px;
+    }
+
+    .form {
+      display: grid;
+      gap: 24px;
+    }
+
+    .field {
+      min-height: 72px;
+      display: flex;
+      align-items: center;
+      border: 2px solid var(--line);
+      background: var(--panel-soft);
+      border-radius: 17px;
+      overflow: hidden;
+      transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+    }
+
+    .field:focus-within {
+      border-color: #12dca2;
+      box-shadow: 0 0 0 2px rgba(18, 220, 162, .1);
+    }
+
+    .field svg {
+      flex: 0 0 auto;
+      margin-left: 18px;
+      color: #8c8e93;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      min-width: 0;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      padding: 0 18px;
+      font-size: 22px;
+    }
+
+    .field input::placeholder {
+      color: #aca8ac;
+    }
+
+    .phone-code {
+      min-height: 72px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 18px;
+      border-right: 1px solid rgba(255, 255, 255, .18);
+      color: #f5f5f5;
+      font-size: 24px;
+      white-space: nowrap;
+    }
+
+    .strength-track {
+      height: 9px;
+      margin-top: -16px;
+      border-radius: 99px;
+      background: rgba(255, 255, 255, .16);
+      overflow: hidden;
+    }
+
+    .strength-fill {
+      width: 62%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--lime);
+      transition: width .2s ease, background .2s ease;
+    }
+
+    .strength-label {
+      margin-top: -20px;
+      color: #b9b6b9;
+      font-size: 18px;
+    }
+
+    .row-between {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #f7f7f7;
+      font-size: 18px;
+    }
+
+    .check input {
+      width: 26px;
+      height: 26px;
+      margin: 0;
+      accent-color: #0ee5a2;
+    }
+
+    .link-btn,
+    .text-link {
+      border: 0;
+      background: none;
+      color: #08d99c;
+      padding: 0;
+      text-decoration: none;
+    }
+
+    .primary-btn {
+      width: 100%;
+      min-height: 78px;
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--green), var(--cyan));
+      color: #02070b;
+      font-size: clamp(22px, 2.5vw, 30px);
+      font-weight: 900;
+      box-shadow: var(--glow);
+      transition: transform .18s ease, filter .18s ease;
+    }
+
+    .primary-btn:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.04);
+    }
+
+    .divider {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 26px;
+      color: #f1f1f1;
+      margin: 8px 0 2px;
+      font-size: 18px;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: "";
+      height: 1px;
+      background: rgba(255, 255, 255, .33);
+    }
+
+    .google-btn {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(255, 255, 255, .22);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, .04);
+    }
+
+    .google-logo {
+      width: 26px;
+      height: 26px;
+      display: block;
+    }
+
+    .auth-foot {
+      text-align: center;
+      color: #fff;
+      font-size: 18px;
+    }
+
+    .error {
+      min-height: 22px;
+      color: #ff96a4;
+      font-size: 15px;
+    }
+
+    .app-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      min-height: 100vh;
+      padding: 28px 22px;
+      background: #090f1c;
+      border-right: 1px solid rgba(255, 255, 255, .08);
+    }
+
+    .app-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 34px;
+    }
+
+    .app-logo .brand-mark {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      font-size: 25px;
+      box-shadow: none;
+    }
+
+    .app-logo strong {
+      font-size: 24px;
+    }
+
+    .nav {
+      display: grid;
+      gap: 8px;
+    }
+
+    .nav button,
+    .ghost-btn,
+    .icon-btn {
+      border: 1px solid transparent;
+      color: #d8dbe1;
+      background: transparent;
+      border-radius: 8px;
+      transition: background .16s ease, border-color .16s ease, color .16s ease;
+    }
+
+    .nav button {
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 14px;
+      text-align: left;
+      font-weight: 700;
+    }
+
+    .nav button:hover,
+    .nav button.active,
+    .ghost-btn:hover,
+    .icon-btn:hover {
+      color: #fff;
+      border-color: rgba(18, 237, 159, .24);
+      background: rgba(18, 237, 159, .09);
+    }
+
+    .sidebar-card {
+      margin-top: 32px;
+      padding: 18px;
+      border-radius: 8px;
+      background: var(--panel-deep);
+      border: 1px solid rgba(255, 255, 255, .08);
+    }
+
+    .sidebar-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .sidebar-card b {
+      display: block;
+      margin-top: 6px;
+      font-size: 24px;
+    }
+
+    .main {
+      min-width: 0;
+      padding: 28px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 26px;
+    }
+
+    .topbar h2 {
+      margin: 0;
+      font-size: clamp(32px, 4vw, 48px);
+      line-height: 1.05;
+    }
+
+    .topbar p {
+      margin: 8px 0 0;
+      color: #b9bec9;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .ghost-btn,
+    .icon-btn {
+      min-height: 44px;
+      padding: 0 14px;
+      font-weight: 800;
+    }
+
+    .icon-btn {
+      width: 44px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+    }
+
+    .small-primary {
+      min-height: 44px;
+      border: 0;
+      border-radius: 999px;
+      padding: 0 18px;
+      color: #02070b;
+      background: linear-gradient(90deg, var(--green), var(--cyan));
+      font-weight: 900;
+    }
+
+    .grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .dashboard-grid {
+      grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr);
+      align-items: start;
+    }
+
+    .summary-grid {
+      grid-template-columns: repeat(4, minmax(150px, 1fr));
+    }
+
+    .panel,
+    .metric,
+    .modal {
+      border: 1px solid rgba(255, 255, 255, .1);
+      background: rgba(58, 60, 64, .92);
+      border-radius: 8px;
+      box-shadow: 0 18px 44px rgba(0, 0, 0, .22);
+    }
+
+    .metric {
+      padding: 18px;
+    }
+
+    .metric span,
+    .section-label {
+      color: #b6bbc4;
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 8px;
+      font-size: clamp(24px, 3vw, 34px);
+      line-height: 1;
+    }
+
+    .metric em {
+      display: block;
+      margin-top: 10px;
+      font-style: normal;
+      color: var(--green);
+      font-weight: 800;
+    }
+
+    .panel {
+      padding: 20px;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .panel h3 {
+      margin: 0;
+      font-size: 22px;
+    }
+
+    .chart-wrap {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 22px;
+      align-items: center;
+    }
+
+    .donut {
+      width: 220px;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: conic-gradient(var(--green) 0 42%, var(--cyan) 42% 68%, var(--amber) 68% 83%, #8d7cff 83% 100%);
+      position: relative;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.08), 0 22px 45px rgba(0,0,0,.2);
+    }
+
+    .donut::after {
+      content: "";
+      position: absolute;
+      inset: 44px;
+      border-radius: inherit;
+      background: var(--panel);
+      border: 1px solid rgba(255, 255, 255, .08);
+    }
+
+    .legend {
+      display: grid;
+      gap: 12px;
+    }
+
+    .legend-row {
+      display: grid;
+      grid-template-columns: 12px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      color: #e7e8eb;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .table-shell {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      min-width: 720px;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 15px 12px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, .09);
+    }
+
+    th {
+      color: #b6bbc4;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    td {
+      color: #f7f7f8;
+    }
+
+    .asset-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 900;
+    }
+
+    .ticker {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(18, 237, 159, .18), rgba(20, 203, 230, .22));
+      border: 1px solid rgba(18, 237, 159, .24);
+      color: #dffff7;
+      font-size: 13px;
+    }
+
+    .gain {
+      color: var(--green);
+      font-weight: 900;
+    }
+
+    .loss {
+      color: var(--red);
+      font-weight: 900;
+    }
+
+    .spark {
+      width: 114px;
+      height: 28px;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .watch-item,
+    .activity-item {
+      display: grid;
+      gap: 4px;
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, .08);
+    }
+
+    .watch-item:last-child,
+    .activity-item:last-child {
+      border-bottom: 0;
+    }
+
+    .watch-line,
+    .activity-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .muted {
+      color: #b5bac3;
+    }
+
+    .screen {
+      display: none;
+    }
+
+    .screen.active {
+      display: grid;
+    }
+
+    .holdings-screen,
+    .activity-screen,
+    .settings-screen {
+      gap: 18px;
+    }
+
+    .search {
+      width: min(360px, 100%);
+      min-height: 44px;
+      border: 1px solid rgba(255, 255, 255, .15);
+      background: rgba(255, 255, 255, .06);
+      color: #fff;
+      border-radius: 8px;
+      padding: 0 14px;
+      outline: none;
+    }
+
+    .settings-grid {
+      grid-template-columns: repeat(3, minmax(180px, 1fr));
+    }
+
+    .setting-control {
+      display: grid;
+      gap: 10px;
+      color: #d9dce2;
+    }
+
+    .setting-control input,
+    .setting-control select {
+      min-height: 48px;
+      border: 1px solid rgba(255, 255, 255, .18);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .06);
+      color: #fff;
+      padding: 0 12px;
+      outline: none;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(3, 6, 12, .68);
+      backdrop-filter: blur(8px);
+    }
+
+    .modal {
+      width: min(100%, 520px);
+      padding: 24px;
+    }
+
+    .modal h3 {
+      margin: 0 0 20px;
+      font-size: 28px;
+    }
+
+    .modal-form {
+      display: grid;
+      gap: 14px;
+    }
+
+    .modal-form label {
+      display: grid;
+      gap: 8px;
+      color: #d9dde4;
+      font-weight: 700;
+    }
+
+    .modal-form input,
+    .modal-form select {
+      min-height: 50px;
+      border: 1px solid rgba(255, 255, 255, .2);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .07);
+      color: #fff;
+      padding: 0 12px;
+      outline: none;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .toast {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 20;
+      max-width: min(420px, calc(100vw - 44px));
+      padding: 14px 18px;
+      border-radius: 8px;
+      background: #0d1824;
+      border: 1px solid rgba(18, 237, 159, .28);
+      box-shadow: var(--shadow);
+      color: #fff;
+      transform: translateY(18px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s ease, transform .2s ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (max-width: 1080px) {
+      .auth-shell {
+        grid-template-columns: 1fr;
+      }
+
+      .brand-stage {
+        min-height: auto;
+      }
+
+      .auth-card,
+      .auth-card.compact {
+        margin: 0 auto;
+        max-width: 636px;
+      }
+
+      .dashboard-grid,
+      .two-col,
+      .settings-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .summary-grid {
+        grid-template-columns: repeat(2, minmax(150px, 1fr));
+      }
+    }
+
+    @media (max-width: 780px) {
+      .app-shell {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: static;
+        min-height: auto;
+      }
+
+      .nav {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .main {
+        padding: 20px;
+      }
+
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .chart-wrap {
+        grid-template-columns: 1fr;
+      }
+
+      .donut {
+        margin: 0 auto;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .auth-shell {
+        padding: 16px;
+      }
+
+      .brand-stage h1 {
+        font-size: 52px;
+      }
+
+      .mini-metrics,
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .auth-card,
+      .auth-card.compact {
+        padding: 28px 20px;
+        border-radius: 22px;
+      }
+
+      .auth-card h2,
+      .auth-card.compact h2 {
+        margin-bottom: 34px;
+        font-size: 42px;
+        text-align: left;
+      }
+
+      .field,
+      .phone-code {
+        min-height: 58px;
+      }
+
+      .field input,
+      .field select {
+        font-size: 16px;
+      }
+
+      .primary-btn {
+        min-height: 62px;
+        font-size: 20px;
+      }
+
+      .row-between,
+      .watch-line,
+      .activity-line {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .divider {
+        gap: 12px;
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section class="auth-shell" id="authShell">
+    <div class="brand-stage">
+      <div class="brand-mark" aria-hidden="true">H</div>
+      <div>
+        <h1>Horizon</h1>
+        <p>Track every holding, watch your risk, and manage a portfolio with the calm dark interface inspired by your sign-in screens.</p>
+      </div>
+      <div class="mini-metrics" aria-label="Horizon highlights">
+        <div class="mini-metric"><b>$248K</b><span>sample portfolio</span></div>
+        <div class="mini-metric"><b>+14.8%</b><span>yearly growth</span></div>
+        <div class="mini-metric"><b>9</b><span>tracked positions</span></div>
+      </div>
+    </div>
+
+    <article class="auth-card compact" id="loginCard" aria-label="Log in">
+      <h2>Log In</h2>
+      <form class="form" id="loginForm">
+        <label class="field">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z" stroke="currentColor" stroke-width="1.7"/></svg>
+          <input id="loginEmail" type="email" autocomplete="email" placeholder="Email / Username" required>
+        </label>
+        <label class="field">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password" required>
+        </label>
+        <div class="row-between">
+          <label class="check"><input type="checkbox" id="rememberMe">Remember me</label>
+          <button class="link-btn" type="button" id="forgotBtn">Forgot Password?</button>
+        </div>
+        <button class="primary-btn btn" type="submit">Log In to Account</button>
+        <div class="divider"><span>Or log in with</span></div>
+        <button class="google-btn btn" type="button" id="googleLogin" aria-label="Log in with Google">
+          <svg class="google-logo" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.55-.2-2.27H12v4.29h6.47a5.54 5.54 0 0 1-2.4 3.64v2.98h3.89c2.27-2.09 3.58-5.17 3.58-8.64z"/>
+            <path fill="#34A853" d="M12 24c3.24 0 5.96-1.08 7.95-2.93l-3.89-2.98c-1.08.72-2.45 1.15-4.06 1.15-3.12 0-5.76-2.11-6.71-4.94H1.28v3.08A12 12 0 0 0 12 24z"/>
+            <path fill="#FBBC05" d="M5.29 14.3a7.22 7.22 0 0 1 0-4.6V6.62H1.28a12 12 0 0 0 0 10.76l4.01-3.08z"/>
+            <path fill="#EA4335" d="M12 4.76c1.76 0 3.34.6 4.58 1.79l3.45-3.45C17.95 1.16 15.23 0 12 0A12 12 0 0 0 1.28 6.62L5.29 9.7C6.24 6.87 8.88 4.76 12 4.76z"/>
+          </svg>
+        </button>
+        <p class="auth-foot">Don't have an account? <button class="link-btn" type="button" data-auth-switch="signup">Sign Up</button></p>
+        <div class="error" id="loginError" role="alert"></div>
+      </form>
+    </article>
+
+    <article class="auth-card hidden" id="signupCard" aria-label="Create account">
+      <h2>Create Account</h2>
+      <form class="form" id="signupForm">
+        <label class="field"><input id="fullName" type="text" autocomplete="name" placeholder="Full Name" required></label>
+        <label class="field"><input id="signupEmail" type="email" autocomplete="email" placeholder="Email Address" required></label>
+        <label class="field">
+          <span class="phone-code">US <span aria-hidden="true">v</span></span>
+          <input id="phone" type="tel" autocomplete="tel" placeholder="Phone Number" required>
+        </label>
+        <label class="field"><input id="signupPassword" type="password" autocomplete="new-password" placeholder="Password" required></label>
+        <div class="strength-track" aria-hidden="true"><div class="strength-fill" id="strengthFill"></div></div>
+        <div class="strength-label" id="strengthLabel">Password Strength</div>
+        <label class="field"><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Confirm Password" required></label>
+        <label class="check"><input type="checkbox" id="terms">I agree to the <a class="text-link" href="#">Terms of Service</a> and <a class="text-link" href="#">Privacy Policy</a>.</label>
+        <button class="primary-btn btn" type="submit">Create My Account</button>
+        <div class="divider"><span>Or sign up with</span></div>
+        <button class="google-btn btn" type="button" id="googleSignup" aria-label="Sign up with Google">
+          <svg class="google-logo" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.55-.2-2.27H12v4.29h6.47a5.54 5.54 0 0 1-2.4 3.64v2.98h3.89c2.27-2.09 3.58-5.17 3.58-8.64z"/>
+            <path fill="#34A853" d="M12 24c3.24 0 5.96-1.08 7.95-2.93l-3.89-2.98c-1.08.72-2.45 1.15-4.06 1.15-3.12 0-5.76-2.11-6.71-4.94H1.28v3.08A12 12 0 0 0 12 24z"/>
+            <path fill="#FBBC05" d="M5.29 14.3a7.22 7.22 0 0 1 0-4.6V6.62H1.28a12 12 0 0 0 0 10.76l4.01-3.08z"/>
+            <path fill="#EA4335" d="M12 4.76c1.76 0 3.34.6 4.58 1.79l3.45-3.45C17.95 1.16 15.23 0 12 0A12 12 0 0 0 1.28 6.62L5.29 9.7C6.24 6.87 8.88 4.76 12 4.76z"/>
+          </svg>
+        </button>
+        <p class="auth-foot">Already have an account? <button class="link-btn" type="button" data-auth-switch="login">Log in</button></p>
+        <div class="error" id="signupError" role="alert"></div>
+      </form>
+    </article>
+  </section>
+
+  <section class="app-shell hidden" id="appShell">
+    <aside class="sidebar">
+      <div class="app-logo">
+        <div class="brand-mark" aria-hidden="true">H</div>
+        <strong>Horizon</strong>
+      </div>
+      <nav class="nav" aria-label="Primary">
+        <button class="active" data-screen="dashboard">Overview</button>
+        <button data-screen="holdings">Holdings</button>
+        <button data-screen="activity">Activity</button>
+        <button data-screen="settings">Settings</button>
+      </nav>
+      <div class="sidebar-card">
+        <span>Cash ready</span>
+        <b id="cashReady">$18,450</b>
+      </div>
+      <div class="sidebar-card">
+        <span>Signed in as</span>
+        <b id="signedInAs">Investor</b>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <h2 id="screenTitle">Portfolio Overview</h2>
+          <p id="screenSubtitle">A focused command center for your Horizon portfolio.</p>
+        </div>
+        <div class="top-actions">
+          <input class="search" id="assetSearch" type="search" placeholder="Search holdings">
+          <button class="small-primary" type="button" id="addAssetBtn">Add Holding</button>
+          <button class="ghost-btn" type="button" id="logoutBtn">Log out</button>
+        </div>
+      </div>
+
+      <section class="screen active" id="dashboardScreen">
+        <div class="grid summary-grid">
+          <div class="metric"><span>Total Value</span><strong id="totalValue">$0</strong><em id="totalGain">+0.00%</em></div>
+          <div class="metric"><span>Daily Move</span><strong id="dailyMove">$0</strong><em id="dailyPct">+0.00%</em></div>
+          <div class="metric"><span>Dividends</span><strong>$4,820</strong><em>+8.4% forecast</em></div>
+          <div class="metric"><span>Risk Score</span><strong id="riskScore">42</strong><em>Balanced</em></div>
+        </div>
+
+        <div class="grid dashboard-grid">
+          <div class="grid">
+            <section class="panel">
+              <div class="panel-head">
+                <h3>Holdings</h3>
+                <span class="section-label" id="holdingsCount">0 assets</span>
+              </div>
+              <div class="table-shell">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Asset</th>
+                      <th>Type</th>
+                      <th>Shares</th>
+                      <th>Price</th>
+                      <th>Value</th>
+                      <th>Today</th>
+                      <th>Trend</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="holdingsBody"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          <div class="grid">
+            <section class="panel">
+              <div class="panel-head">
+                <h3>Allocation</h3>
+                <span class="section-label">Live mix</span>
+              </div>
+              <div class="chart-wrap">
+                <div class="donut" id="donutChart" role="img" aria-label="Portfolio allocation chart"></div>
+                <div class="legend" id="allocationLegend"></div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h3>Watchlist</h3>
+                <button class="icon-btn" type="button" id="refreshWatch" aria-label="Refresh watchlist">R</button>
+              </div>
+              <div id="watchlist"></div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen holdings-screen" id="holdingsScreen">
+        <section class="panel">
+          <div class="panel-head">
+            <h3>Market Search</h3>
+            <span class="section-label">Stocks, ETFs, currencies</span>
+          </div>
+          <label class="setting-control">Search Market
+            <input id="marketSearch" type="search" placeholder="Search symbol, company, ETF, or currency">
+          </label>
+          <div class="table-shell">
+            <table>
+              <thead>
+                <tr>
+                  <th>Instrument</th>
+                  <th>Type</th>
+                  <th>Price</th>
+                  <th>Today</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="marketResults"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h3>All Holdings</h3>
+            <span class="section-label">Editable portfolio</span>
+          </div>
+          <div class="table-shell">
+            <table>
+              <thead>
+                <tr>
+                  <th>Asset</th>
+                  <th>Type</th>
+                  <th>Shares</th>
+                  <th>Price</th>
+                  <th>Value</th>
+                  <th>Today</th>
+                  <th>Trend</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="holdingsBodyFull"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section class="screen activity-screen" id="activityScreen">
+        <div class="two-col">
+          <section class="panel">
+            <div class="panel-head"><h3>Recent Activity</h3><span class="section-label">Auto updated</span></div>
+            <div id="activityFeed"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h3>Rebalance Ideas</h3><span class="section-label">Based on mix</span></div>
+            <div class="activity-item"><div class="activity-line"><strong>Trim concentrated technology exposure</strong><span class="gain">Optional</span></div><span class="muted">Your largest growth holdings carry most of today's movement.</span></div>
+            <div class="activity-item"><div class="activity-line"><strong>Increase cash reserve</strong><span class="muted">3.2% target</span></div><span class="muted">A small reserve keeps new opportunities available without selling core positions.</span></div>
+            <div class="activity-item"><div class="activity-line"><strong>Review dividend names</strong><span class="gain">Quarterly</span></div><span class="muted">Expected income is ahead of the prior quarter.</span></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="screen settings-screen" id="settingsScreen">
+        <section class="panel">
+          <div class="panel-head"><h3>Preferences</h3><span class="section-label">Backend synced</span></div>
+          <div class="grid settings-grid">
+            <label class="setting-control">Display Name<input id="displayName" type="text" value="Investor"></label>
+            <label class="setting-control">Currency<select id="currency"><option>Rial</option><option disabled>USD placeholder</option><option disabled>EUR placeholder</option><option disabled>GBP placeholder</option></select></label>
+            <label class="setting-control">Risk Style<select id="riskStyle"><option>Balanced</option><option>Growth</option><option>Income</option></select></label>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h3>NADPCO Market Data</h3>
+            <button class="small-primary btn" type="button" id="brokerageSync">Check Feed</button>
+          </div>
+          <div class="activity-item">
+            <div class="activity-line"><strong id="brokerageMode">Placeholder mode</strong><span class="muted" id="brokerageConnection">Not connected</span></div>
+            <span class="muted" id="brokerageMessage">Brokerage API credentials are not configured yet.</span>
+          </div>
+          <div id="brokerageProviders"></div>
+        </section>
+      </section>
+    </main>
+  </section>
+
+  <div class="modal-backdrop hidden" id="assetModal">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="assetModalTitle">
+      <h3 id="assetModalTitle">Add Holding</h3>
+      <form class="modal-form" id="assetForm">
+        <label>Search Instrument
+          <input id="marketCompanySearch" type="text" list="companyOptions" placeholder="Search stock, ETF, or currency" required>
+          <datalist id="companyOptions"></datalist>
+        </label>
+        <input id="assetCompanyId" type="hidden">
+        <input id="assetCurrencyId" type="hidden">
+        <input id="assetSource" type="hidden">
+        <label>Asset Name<input id="assetName" type="text" readonly required></label>
+        <label>Symbol<input id="assetTicker" type="text" maxlength="32" readonly required></label>
+        <label>Type<input id="assetType" type="text" readonly required></label>
+        <label>Amount<input id="assetShares" type="number" min="0.001" step="0.001" placeholder="Example: 2000" required></label>
+        <label>Price in Rial<input id="assetPrice" type="number" min="0.01" step="0.01" readonly required></label>
+        <label>Purchase Date<input id="assetDate" type="date" required></label>
+        <div class="modal-actions">
+          <button class="ghost-btn" type="button" id="cancelAsset">Cancel</button>
+          <button class="small-primary" type="submit">Save Holding</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
