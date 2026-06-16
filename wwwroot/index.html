@@ -719,6 +719,16 @@
       outline: none;
     }
 
+    .search-action {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .search-action input {
+      flex: 1;
+    }
+
     .modal-backdrop {
       position: fixed;
       inset: 0;
@@ -1067,7 +1077,7 @@
             <section class="panel">
               <div class="panel-head">
                 <h3>Watchlist</h3>
-                <button class="icon-btn" type="button" id="refreshWatch" aria-label="Refresh watchlist">R</button>
+                <button class="icon-btn" type="button" id="refreshWatch" aria-label="Refresh watchlist" title="Refresh watchlist">↻</button>
               </div>
               <div id="watchlist"></div>
             </section>
@@ -1082,7 +1092,10 @@
             <span class="section-label">Stocks, ETFs, currencies</span>
           </div>
           <label class="setting-control">Search Market
-            <input id="marketSearch" type="search" placeholder="Search symbol, company, ETF, or currency">
+            <div class="search-action">
+              <input id="marketSearch" type="search" placeholder="Search symbol, company, ETF, or currency">
+              <button class="icon-btn" type="button" id="marketSearchBtn" aria-label="Search market" title="Search market">⌕</button>
+            </div>
           </label>
           <div class="table-shell">
             <table>

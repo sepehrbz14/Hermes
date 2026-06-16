@@ -5,6 +5,7 @@ const state = {
   companies: [],
   currencies: [],
   instruments: [],
+  marketResults: [],
   user: null,
   summary: null,
   activeScreen: "dashboard"
@@ -14,6 +15,8 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 const money = (value) => `IRR ${Number(value).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 const pct = (value) => `${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)}%`;
+const displayPrice = (value) => value == null ? "Market Close" : money(value);
+const displayChange = (value) => value == null ? "Market Close" : pct(value);
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -110,6 +113,53 @@ async function loadMarketLookups() {
   const failed = results.find((result) => result.status === "rejected");
   if (failed) {
     showToast(failed.reason?.message || "Market lookup data could not be loaded right now.");
+  }
+}
+
+async function loadInstrumentQuote(instrument) {
+  const quote = await api(`/api/market/instruments/${instrument.source}/${instrument.sourceId}/quote`);
+  return {
+    ...instrument,
+    symbol: quote.symbol === "Market Close" ? instrument.symbol : quote.symbol || quote.bourseSymbol || instrument.symbol,
+    title: quote.title === "Market Close" ? instrument.title : quote.title || quote.fullTitle || instrument.title,
+    price: quote.price ?? quote.closingPrice ?? quote.lastPrice ?? instrument.price ?? null,
+    change: quote.change ?? quote.closingPChgPercent ?? instrument.change ?? null,
+    subtitle: quote.subtitle || quote.tradeDate || instrument.subtitle || (quote.price == null && quote.closingPrice == null && quote.lastPrice == null ? "Market Close" : null)
+  };
+}
+
+async function refreshWatchlistQuotes(button) {
+  setBusy(button, true);
+  try {
+    const refreshed = await Promise.all(state.watchlist.map(async (item) => {
+      const instrument = {
+        source: item.source,
+        sourceId: item.sourceId,
+        symbol: item.ticker,
+        title: item.name,
+        type: item.type,
+        price: item.price,
+        change: item.change
+      };
+      const quote = await loadInstrumentQuote(instrument).catch(() => ({ ...instrument, subtitle: "Market Close" }));
+
+      return {
+        ...item,
+        ticker: quote.symbol,
+        name: quote.title,
+        price: quote.price,
+        change: quote.change,
+        marketStatus: quote.subtitle === "Market Close" ? "Market Close" : null
+      };
+    }));
+
+    state.watchlist = refreshed;
+    renderWatchlist();
+    showToast("Watchlist refreshed with live NADPCO quotes.");
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    setBusy(button, false);
   }
 }
 
@@ -214,10 +264,49 @@ function renderAllocation() {
 function renderWatchlist() {
   $("#watchlist").innerHTML = state.watchlist.map((item) => `
     <div class="watch-item">
-      <div class="watch-line"><strong>${escapeHtml(item.ticker)}</strong><span>${money(item.price)}</span></div>
-      <div class="watch-line muted"><span>${escapeHtml(item.name)}</span><span class="${Number(item.change) >= 0 ? "gain" : "loss"}">${pct(item.change)}</span></div>
+      <div class="watch-line"><strong>${escapeHtml(item.ticker)}</strong><span>${displayPrice(item.price)}</span></div>
+      <div class="watch-line muted"><span>${escapeHtml(item.name)}</span><span class="${item.change == null ? "muted" : Number(item.change) >= 0 ? "gain" : "loss"}">${item.marketStatus || displayChange(item.change)}</span></div>
     </div>
   `).join("");
+}
+
+function renderMarketResults() {
+  const target = $("#marketResults");
+  if (!target) return;
+
+  target.innerHTML = state.marketResults.map((instrument) => `
+    <tr>
+      <td><div class="asset-cell"><span class="ticker">${escapeHtml(instrument.symbol)}</span><span>${escapeHtml(instrument.title)}</span></div></td>
+      <td>${escapeHtml(instrument.type)}</td>
+      <td>${displayPrice(instrument.price)}</td>
+      <td class="${instrument.change == null ? "muted" : Number(instrument.change) >= 0 ? "gain" : "loss"}">${instrument.subtitle === "Market Close" ? "Market Close" : displayChange(instrument.change)}</td>
+      <td><button class="small-primary" type="button" data-watch-source="${escapeHtml(instrument.source)}" data-watch-id="${instrument.sourceId}">Watch</button></td>
+    </tr>
+  `).join("") || `<tr><td colspan="5" class="muted">Search for a stock, ETF, or currency.</td></tr>`;
+}
+
+async function searchMarket() {
+  const query = $("#marketSearch").value.trim();
+  if (!query) {
+    state.marketResults = [];
+    renderMarketResults();
+    showToast("Type a symbol, company, ETF, or currency to search.");
+    return;
+  }
+
+  const button = $("#marketSearchBtn");
+  if (button) setBusy(button, true);
+  try {
+    await loadInstruments(query);
+    state.marketResults = await Promise.all(state.instruments.map((instrument) =>
+      loadInstrumentQuote(instrument).catch(() => ({ ...instrument, price: null, change: null, subtitle: "Market Close" }))));
+    renderMarketResults();
+    showToast(`${state.marketResults.length} instruments loaded from NADPCO.`);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    if (button) setBusy(button, false);
+  }
 }
 
 function renderActivity() {
@@ -236,6 +325,7 @@ function render() {
   renderSummary();
   renderAllocation();
   renderWatchlist();
+  renderMarketResults();
   renderActivity();
 }
 
@@ -272,9 +362,13 @@ $$("[data-auth-switch]").forEach((btn) => btn.addEventListener("click", () => sw
 $("#forgotBtn").addEventListener("click", () => showToast("Password reset placeholder reached on the frontend."));
 $("#logoutBtn").addEventListener("click", () => logout().catch((error) => showToast(error.message)));
 $("#assetSearch").addEventListener("input", render);
-$("#refreshWatch").addEventListener("click", async () => {
-  await loadPortfolio();
-  showToast("Watchlist refreshed from the backend.");
+$("#refreshWatch").addEventListener("click", (event) => refreshWatchlistQuotes(event.currentTarget));
+$("#marketSearchBtn").addEventListener("click", searchMarket);
+$("#marketSearch").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    searchMarket();
+  }
 });
 
 $("#brokerageSync").addEventListener("click", async (event) => {
@@ -450,6 +544,37 @@ $("#assetForm").addEventListener("submit", async (event) => {
 });
 
 document.addEventListener("click", async (event) => {
+  const watchButton = event.target.closest("[data-watch-source]");
+  if (watchButton) {
+    const source = watchButton.dataset.watchSource;
+    const sourceId = Number(watchButton.dataset.watchId);
+    const instrument = state.marketResults.find((item) => item.source === source && item.sourceId === sourceId);
+    if (!instrument) return;
+
+    setBusy(watchButton, true);
+    try {
+      await api("/api/portfolio/watchlist", {
+        method: "POST",
+        body: JSON.stringify({
+          source: instrument.source,
+          sourceId: instrument.sourceId,
+          symbol: instrument.symbol,
+          title: instrument.title,
+          type: instrument.type,
+          price: instrument.price || 0,
+          change: instrument.change || 0
+        })
+      });
+      await loadPortfolio();
+      showToast(`${instrument.symbol} added to watchlist.`);
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      setBusy(watchButton, false);
+    }
+    return;
+  }
+
   const removeButton = event.target.closest("[data-remove-id]");
   if (!removeButton) return;
 
