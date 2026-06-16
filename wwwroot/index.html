@@ -719,6 +719,54 @@
       outline: none;
     }
 
+    .search-action {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .search-action input {
+      flex: 1;
+    }
+
+    .language-switcher {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #d9dce2;
+      font-size: 13px;
+    }
+
+    .language-switcher select {
+      min-height: 36px;
+      border: 1px solid rgba(255, 255, 255, .18);
+      border-radius: 999px;
+      background: rgba(15, 20, 32, .92);
+      color: #fff;
+      padding: 0 12px;
+    }
+
+    body.rtl {
+      direction: rtl;
+      font-family: Tahoma, Vazirmatn, Segoe UI, sans-serif;
+    }
+
+    body.rtl .language-switcher {
+      left: 18px;
+      right: auto;
+    }
+
+    body.rtl .asset-cell,
+    body.rtl .watch-line,
+    body.rtl .activity-line,
+    body.rtl .row-between {
+      direction: rtl;
+    }
+
     .modal-backdrop {
       position: fixed;
       inset: 0;
@@ -908,6 +956,7 @@
   </style>
 </head>
 <body>
+  <div class="language-switcher"><label for="languageSelect">Language</label><select id="languageSelect"><option value="en">English</option><option value="fa">فارسی</option></select></div>
   <section class="auth-shell" id="authShell">
     <div class="brand-stage">
       <div class="brand-mark" aria-hidden="true">H</div>
@@ -991,7 +1040,6 @@
       <nav class="nav" aria-label="Primary">
         <button class="active" data-screen="dashboard">Overview</button>
         <button data-screen="holdings">Holdings</button>
-        <button data-screen="activity">Activity</button>
         <button data-screen="settings">Settings</button>
       </nav>
       <div class="sidebar-card">
@@ -1067,7 +1115,7 @@
             <section class="panel">
               <div class="panel-head">
                 <h3>Watchlist</h3>
-                <button class="icon-btn" type="button" id="refreshWatch" aria-label="Refresh watchlist">R</button>
+                <button class="icon-btn" type="button" id="refreshWatch" aria-label="Refresh watchlist" title="Refresh watchlist">↻</button>
               </div>
               <div id="watchlist"></div>
             </section>
@@ -1082,7 +1130,10 @@
             <span class="section-label">Stocks, ETFs, currencies</span>
           </div>
           <label class="setting-control">Search Market
-            <input id="marketSearch" type="search" placeholder="Search symbol, company, ETF, or currency">
+            <div class="search-action">
+              <input id="marketSearch" type="search" placeholder="Search symbol, company, ETF, or currency">
+              <button class="icon-btn" type="button" id="marketSearchBtn" aria-label="Search market" title="Search market">⌕</button>
+            </div>
           </label>
           <div class="table-shell">
             <table>
@@ -1092,6 +1143,7 @@
                   <th>Type</th>
                   <th>Price</th>
                   <th>Today</th>
+                  <th></th>
                   <th></th>
                 </tr>
               </thead>
@@ -1122,21 +1174,6 @@
             </table>
           </div>
         </section>
-      </section>
-
-      <section class="screen activity-screen" id="activityScreen">
-        <div class="two-col">
-          <section class="panel">
-            <div class="panel-head"><h3>Recent Activity</h3><span class="section-label">Auto updated</span></div>
-            <div id="activityFeed"></div>
-          </section>
-          <section class="panel">
-            <div class="panel-head"><h3>Rebalance Ideas</h3><span class="section-label">Based on mix</span></div>
-            <div class="activity-item"><div class="activity-line"><strong>Trim concentrated technology exposure</strong><span class="gain">Optional</span></div><span class="muted">Your largest growth holdings carry most of today's movement.</span></div>
-            <div class="activity-item"><div class="activity-line"><strong>Increase cash reserve</strong><span class="muted">3.2% target</span></div><span class="muted">A small reserve keeps new opportunities available without selling core positions.</span></div>
-            <div class="activity-item"><div class="activity-line"><strong>Review dividend names</strong><span class="gain">Quarterly</span></div><span class="muted">Expected income is ahead of the prior quarter.</span></div>
-          </section>
-        </div>
       </section>
 
       <section class="screen settings-screen" id="settingsScreen">
@@ -1178,7 +1215,7 @@
         <label>Symbol<input id="assetTicker" type="text" maxlength="32" readonly required></label>
         <label>Type<input id="assetType" type="text" readonly required></label>
         <label>Amount<input id="assetShares" type="number" min="0.001" step="0.001" placeholder="Example: 2000" required></label>
-        <label>Price in Rial<input id="assetPrice" type="number" min="0.01" step="0.01" readonly required></label>
+        <label>Price in Rial<input id="assetPrice" type="number" min="0.01" step="0.01" required></label>
         <label>Purchase Date<input id="assetDate" type="date" required></label>
         <div class="modal-actions">
           <button class="ghost-btn" type="button" id="cancelAsset">Cancel</button>
