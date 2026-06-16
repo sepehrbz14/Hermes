@@ -89,7 +89,10 @@ async function loadCompanies(query = "") {
 
 async function loadCurrencies() {
   state.currencies = await api("/api/market/currencies");
-  $("#currencyPicker").innerHTML = state.currencies.map((currency) => `
+  const currencyPicker = $("#currencyPicker");
+  if (!currencyPicker) return;
+
+  currencyPicker.innerHTML = state.currencies.map((currency) => `
     <option value="${currency.currencyId}">${escapeHtml(currency.currencyTitle)} (${escapeHtml(currency.currencySymbol)})</option>
   `).join("");
 }
@@ -181,6 +184,58 @@ function renderAllocation() {
   `).join("");
 }
 
+function renderMarketResults(instruments) {
+  const target = $("#marketResults");
+  if (!target) return;
+
+  target.innerHTML = instruments.map((instrument) => `
+    <tr>
+      <td><div class="asset-cell"><span class="ticker">${escapeHtml(instrument.symbol.slice(0, 3))}</span><span>${escapeHtml(instrument.title)}</span></div></td>
+      <td>${escapeHtml(instrument.type)}</td>
+      <td>${instrument.price == null ? "Pending" : money(instrument.price)}</td>
+      <td class="${Number(instrument.change || 0) >= 0 ? "gain" : "loss"}">${pct(instrument.change || 0)}</td>
+      <td><button class="small-primary btn" type="button" data-add-source="${escapeHtml(instrument.source)}" data-add-source-id="${instrument.sourceId}">Add</button></td>
+    </tr>
+  `).join("");
+}
+
+async function searchMarket(query = "") {
+  const instruments = await api(`/api/market/instruments?query=${encodeURIComponent(query)}&limit=25`);
+  renderMarketResults(instruments);
+}
+
+function resetAssetModal() {
+  $("#assetForm").reset();
+  $("#assetCompanyId").value = "";
+  $("#assetCurrencyId").value = "";
+  $("#assetSource").value = "";
+  $("#assetDate").valueAsDate = new Date();
+}
+
+function showAssetModal() {
+  resetAssetModal();
+  $("#assetModal").classList.remove("hidden");
+  $("#marketCompanySearch").focus();
+}
+
+function populateAssetForm(instrument) {
+  $("#assetSource").value = instrument.source;
+  $("#assetCompanyId").value = instrument.source === "company" ? instrument.sourceId : "";
+  $("#assetCurrencyId").value = instrument.source === "currency" ? instrument.sourceId : "";
+  $("#marketCompanySearch").value = `${instrument.symbol} - ${instrument.title}`;
+  $("#assetName").value = instrument.title;
+  $("#assetTicker").value = instrument.symbol;
+  $("#assetType").value = instrument.type;
+  $("#assetPrice").value = instrument.price || "";
+}
+
+async function openAssetModalForInstrument(source, sourceId) {
+  showAssetModal();
+  const instrument = await api(`/api/market/instruments/${encodeURIComponent(source)}/${sourceId}/quote`);
+  populateAssetForm(instrument);
+  $("#assetShares").focus();
+}
+
 function renderWatchlist() {
   $("#watchlist").innerHTML = state.watchlist.map((item) => `
     <div class="watch-item">
@@ -242,6 +297,23 @@ $$("[data-auth-switch]").forEach((btn) => btn.addEventListener("click", () => sw
 $("#forgotBtn").addEventListener("click", () => showToast("Password reset placeholder reached on the frontend."));
 $("#logoutBtn").addEventListener("click", () => logout().catch((error) => showToast(error.message)));
 $("#assetSearch").addEventListener("input", render);
+$("#marketSearch")?.addEventListener("input", (event) => {
+  clearTimeout(companySearchTimer);
+  companySearchTimer = setTimeout(() => searchMarket(event.target.value).catch((error) => showToast(error.message)), 250);
+});
+$("#marketResults")?.addEventListener("click", async (event) => {
+  const addButton = event.target.closest("[data-add-source]");
+  if (!addButton) return;
+
+  setBusy(addButton, true);
+  try {
+    await openAssetModalForInstrument(addButton.dataset.addSource, addButton.dataset.addSourceId);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    setBusy(addButton, false);
+  }
+});
 $("#refreshWatch").addEventListener("click", async () => {
   await loadPortfolio();
   showToast("Watchlist refreshed from the backend.");
@@ -270,7 +342,9 @@ $("#marketCompanySearch").addEventListener("input", (event) => {
       const selected = state.companies.find((company) => `${company.bourseSymbol} - ${company.fullTitle}` === value || company.bourseSymbol === value);
       if (!selected) return;
 
+      $("#assetSource").value = "company";
       $("#assetCompanyId").value = selected.coId;
+      $("#assetCurrencyId").value = "";
       $("#assetName").value = selected.fullTitle;
       $("#assetTicker").value = selected.bourseSymbol;
       $("#assetType").value = selected.isFund ? "ETF" : "Stock";
@@ -284,7 +358,7 @@ $("#marketCompanySearch").addEventListener("input", (event) => {
   }, 250);
 });
 
-$("#loadCurrencyValue").addEventListener("click", async (event) => {
+$("#loadCurrencyValue")?.addEventListener("click", async (event) => {
   setBusy(event.currentTarget, true);
   try {
     const currencyId = Number($("#currencyPicker").value);
@@ -376,7 +450,7 @@ $("#signupForm").addEventListener("submit", async (event) => {
 });
 
 $$(".nav button").forEach((btn) => btn.addEventListener("click", () => setScreen(btn.dataset.screen)));
-$("#addAssetBtn").addEventListener("click", () => $("#assetModal").classList.remove("hidden"));
+$("#addAssetBtn").addEventListener("click", showAssetModal);
 $("#cancelAsset").addEventListener("click", () => $("#assetModal").classList.add("hidden"));
 $("#assetModal").addEventListener("click", (event) => {
   if (event.target.id === "assetModal") $("#assetModal").classList.add("hidden");
@@ -393,7 +467,9 @@ $("#assetForm").addEventListener("submit", async (event) => {
       type: $("#assetType").value,
       shares: Number($("#assetShares").value),
       price: Number($("#assetPrice").value),
-      companyId: $("#assetCompanyId").value ? Number($("#assetCompanyId").value) : null
+      companyId: $("#assetCompanyId").value ? Number($("#assetCompanyId").value) : null,
+      currencyId: $("#assetCurrencyId").value ? Number($("#assetCurrencyId").value) : null,
+      purchaseDate: $("#assetDate").value || null
     };
     await api("/api/portfolio/holdings", { method: "POST", body: JSON.stringify(asset) });
     event.target.reset();
@@ -440,7 +516,7 @@ $("#displayName").addEventListener("change", async (event) => {
 
 loadPortfolio()
   .then(loadBrokerageStatus)
-  .then(() => Promise.all([loadCompanies(), loadCurrencies()]))
+  .then(() => Promise.all([loadCompanies(), loadCurrencies(), searchMarket()]))
   .then(() => {
     if (state.user) {
       $("#authShell").classList.add("hidden");
