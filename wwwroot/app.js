@@ -4,6 +4,7 @@ const state = {
   activity: [],
   companies: [],
   currencies: [],
+  instruments: [],
   user: null,
   summary: null,
   activeScreen: "dashboard"
@@ -87,6 +88,13 @@ async function loadCompanies(query = "") {
   `).join("");
 }
 
+async function loadInstruments(query = "") {
+  state.instruments = await api(`/api/market/instruments?query=${encodeURIComponent(query)}&limit=50`);
+  $("#companyOptions").innerHTML = state.instruments.map((instrument) => `
+    <option value="${escapeHtml(instrument.symbol)} - ${escapeHtml(instrument.title)}" label="${escapeHtml(instrument.type)}"></option>
+  `).join("");
+}
+
 async function loadCurrencies() {
   state.currencies = await api("/api/market/currencies");
   const currencyPicker = $("#currencyPicker");
@@ -98,7 +106,7 @@ async function loadCurrencies() {
 }
 
 async function loadMarketLookups() {
-  const results = await Promise.allSettled([loadCompanies(), loadCurrencies()]);
+  const results = await Promise.allSettled([loadInstruments(), loadCurrencies()]);
   const failed = results.find((result) => result.status === "rejected");
   if (failed) {
     showToast(failed.reason?.message || "Market lookup data could not be loaded right now.");
@@ -288,18 +296,22 @@ $("#marketCompanySearch").addEventListener("input", (event) => {
   const value = event.target.value.trim();
   companySearchTimer = setTimeout(async () => {
     try {
-      await loadCompanies(value);
-      const selected = state.companies.find((company) => `${company.bourseSymbol} - ${company.fullTitle}` === value || company.bourseSymbol === value);
+      await loadInstruments(value);
+      const selected = state.instruments.find((instrument) => `${instrument.symbol} - ${instrument.title}` === value || instrument.symbol === value);
       if (!selected) return;
 
-      $("#assetCompanyId").value = selected.coId;
-      $("#assetName").value = selected.fullTitle;
-      $("#assetTicker").value = selected.bourseSymbol;
-      $("#assetType").value = selected.isFund ? "ETF" : "Stock";
+      $("#assetSource").value = selected.source;
+      $("#assetCompanyId").value = selected.source === "company" ? selected.sourceId : "";
+      $("#assetCurrencyId").value = selected.source === "currency" ? selected.sourceId : "";
+      $("#assetName").value = selected.title;
+      $("#assetTicker").value = selected.symbol;
+      $("#assetType").value = selected.type === "Tehran Stock" ? "Stock" : selected.type;
 
-      const quote = await api(`/api/market/companies/${selected.coId}/quote`);
-      $("#assetPrice").value = quote.closingPrice || quote.lastPrice || "";
-      showToast(`${selected.bourseSymbol} loaded from NADPCO.`);
+      const quote = await api(`/api/market/instruments/${selected.source}/${selected.sourceId}/quote`);
+      const price = quote.price ?? quote.closingPrice ?? quote.lastPrice ?? selected.price;
+      $("#assetPrice").value = price ?? "";
+      $("#assetPrice").placeholder = price == null ? "Market Close - enter price manually" : "";
+      showToast(price == null ? `${selected.symbol} is Market Close. Enter price manually.` : `${selected.symbol} loaded from NADPCO.`);
     } catch (error) {
       showToast(error.message);
     }
@@ -399,7 +411,12 @@ $("#signupForm").addEventListener("submit", async (event) => {
 });
 
 $$(".nav button").forEach((btn) => btn.addEventListener("click", () => setScreen(btn.dataset.screen)));
-$("#addAssetBtn").addEventListener("click", () => $("#assetModal").classList.remove("hidden"));
+$("#addAssetBtn").addEventListener("click", () => {
+  if (!$("#assetDate").value) {
+    $("#assetDate").valueAsDate = new Date();
+  }
+  $("#assetModal").classList.remove("hidden");
+});
 $("#cancelAsset").addEventListener("click", () => $("#assetModal").classList.add("hidden"));
 $("#assetModal").addEventListener("click", (event) => {
   if (event.target.id === "assetModal") $("#assetModal").classList.add("hidden");
@@ -416,7 +433,9 @@ $("#assetForm").addEventListener("submit", async (event) => {
       type: $("#assetType").value,
       shares: Number($("#assetShares").value),
       price: Number($("#assetPrice").value),
-      companyId: $("#assetCompanyId").value ? Number($("#assetCompanyId").value) : null
+      companyId: $("#assetCompanyId").value ? Number($("#assetCompanyId").value) : null,
+      currencyId: $("#assetCurrencyId").value ? Number($("#assetCurrencyId").value) : null,
+      purchaseDate: $("#assetDate").value || null
     };
     await api("/api/portfolio/holdings", { method: "POST", body: JSON.stringify(asset) });
     event.target.reset();

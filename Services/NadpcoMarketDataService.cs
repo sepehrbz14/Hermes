@@ -14,17 +14,14 @@ public interface IMarketDataService
     Task<MarketQuote?> GetQuoteAsync(int companyId, CancellationToken cancellationToken = default);
 }
 
-public sealed class NadpcoMarketDataService(HttpClient httpClient, IConfiguration configuration) : IMarketDataService
+public sealed class NadpcoMarketDataService(HttpClient httpClient) : IMarketDataService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true
     };
 
-    private readonly string _username = configuration["Nadpco:Username"] ?? "";
-    private readonly string _password = configuration["Nadpco:Password"] ?? "";
-    private string? _token;
-    private DateTimeOffset _tokenExpiresAt;
+    private const string StaticBearerToken = "E0EE30A995F3C6ED48A038275D81BFEF724A2B0C688E90E2485C0D8B1700BD487B4CC68648F9C280ACA8106BCE2C2CCE8382DC8AA3EA834E6A3747C532BE4C7A";
 
     public async Task<IReadOnlyCollection<MarketCompany>> SearchCompaniesAsync(string? query, int limit, CancellationToken cancellationToken = default)
     {
@@ -73,12 +70,7 @@ public sealed class NadpcoMarketDataService(HttpClient httpClient, IConfiguratio
     {
         var normalizedQuery = (query ?? "").Trim();
         var companyLimit = Math.Clamp(limit, 1, 100);
-        var companiesTask = SearchCompaniesAsync(normalizedQuery, companyLimit, cancellationToken);
-        var currenciesTask = GetCurrencyItemsAsync(cancellationToken);
-
-        await Task.WhenAll(companiesTask, currenciesTask);
-
-        var companies = companiesTask.Result.Select(item => new MarketInstrument(
+        var companies = (await SearchCompaniesAsync(normalizedQuery, companyLimit, cancellationToken)).Select(item => new MarketInstrument(
             "company",
             item.CoId,
             item.BourseSymbol,
@@ -88,7 +80,7 @@ public sealed class NadpcoMarketDataService(HttpClient httpClient, IConfiguratio
             null,
             item.MarketTitle ?? item.IndustryTitle));
 
-        var currencies = currenciesTask.Result
+        var currencies = (await GetCurrencyItemsAsync(cancellationToken))
             .Where(item => string.IsNullOrWhiteSpace(normalizedQuery)
                 || item.CurrencySymbol.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase)
                 || item.CurrencyTitle.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase))
@@ -111,43 +103,25 @@ public sealed class NadpcoMarketDataService(HttpClient httpClient, IConfiguratio
     public async Task<IReadOnlyCollection<CurrencyValue>> GetCurrencyValuesAsync(IReadOnlyCollection<int> currencyIds, CancellationToken cancellationToken = default)
     {
         var ids = currencyIds.Count == 0 ? Array.Empty<int>() : currencyIds.Distinct().ToArray();
-        var requestBodies = new object[]
-        {
-            new { currencyIds = ids },
-            new { CurrencyIds = ids },
-            ids.Select(id => new { currencyId = id }).ToArray(),
-            new { }
-        };
+        using var request = await CreateRequestAsync(HttpMethod.Post, "/api/v2/currency/values/rt?IsTimePeriod=false", cancellationToken);
+        request.Content = new StringContent(JsonSerializer.Serialize(new { currencyIds = ids }, JsonOptions), Encoding.UTF8, "application/json");
 
-        foreach (var body in requestBodies)
-        {
-            using var request = await CreateRequestAsync(HttpMethod.Post, "/api/v2/currency/values/rt?IsTimePeriod=false", cancellationToken);
-            request.Content = new StringContent(JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json");
-
-            using var response = await httpClient.SendAsync(request, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                continue;
-            }
-
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            var values = await ParseCurrencyValuesAsync(stream, cancellationToken);
-            var filtered = ids.Length == 0 ? values : values.Where(item => ids.Contains(item.CurrencyId)).ToList();
-            return filtered;
-        }
-
-        return [];
-    }
-
-    public async Task<MarketQuote?> GetQuoteAsync(int companyId, CancellationToken cancellationToken = default)
-    {
-        using var request = await CreateRequestAsync(HttpMethod.Get, $"/api/v3/TS/RealTimeTradesToday?companyId={companyId}", cancellationToken);
         using var response = await httpClient.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var payload = await JsonSerializer.DeserializeAsync<List<NadpcoQuote>>(stream, JsonOptions, cancellationToken) ?? [];
-        var item = payload.FirstOrDefault();
+        var values = await ParseCurrencyValuesAsync(stream, cancellationToken);
+        return ids.Length == 0 ? values : values.Where(item => ids.Contains(item.CurrencyId)).ToList();
+    }
+
+    public async Task<MarketQuote?> GetQuoteAsync(int companyId, CancellationToken cancellationToken = default)
+    {
+        using var request = await CreateRequestAsync(HttpMethod.Get, $"/api/v3/TS/RealTimeTradesToday?companyid={companyId}", cancellationToken);
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var item = await ParseQuoteAsync(stream, cancellationToken);
         if (item is null)
         {
             return null;
@@ -172,57 +146,12 @@ public sealed class NadpcoMarketDataService(HttpClient httpClient, IConfiguratio
             item.MarketValue);
     }
 
-    private async Task<HttpRequestMessage> CreateRequestAsync(HttpMethod method, string path, CancellationToken cancellationToken)
+    private static Task<HttpRequestMessage> CreateRequestAsync(HttpMethod method, string path, CancellationToken cancellationToken)
     {
         var request = new HttpRequestMessage(method, path);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await GetBearerTokenAsync(cancellationToken));
-        return request;
-    }
-
-    private async Task<string> GetBearerTokenAsync(CancellationToken cancellationToken)
-    {
-        if (!string.IsNullOrWhiteSpace(_token) && _tokenExpiresAt > DateTimeOffset.UtcNow.AddMinutes(2))
-        {
-            return _token;
-        }
-
-        if (string.IsNullOrWhiteSpace(_username) || string.IsNullOrWhiteSpace(_password))
-        {
-            throw new InvalidOperationException("NADPCO credentials are not configured.");
-        }
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v2/Token");
-        var basic = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_username}:{_password}"));
-        request.Headers.Authorization = new AuthenticationHeaderValue("Basic", basic);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        _token = ExtractToken(body);
-        _tokenExpiresAt = DateTimeOffset.UtcNow.AddMinutes(55);
-        return _token;
-    }
-
-    private static string ExtractToken(string body)
-    {
-        using var document = JsonDocument.Parse(body);
-        if (document.RootElement.ValueKind == JsonValueKind.String)
-        {
-            return document.RootElement.GetString() ?? "";
-        }
-
-        foreach (var name in new[] { "access_token", "accessToken", "token", "bearerToken", "jwt" })
-        {
-            if (document.RootElement.TryGetProperty(name, out var property))
-            {
-                return property.GetString() ?? "";
-            }
-        }
-
-        throw new InvalidOperationException("NADPCO token response did not include a bearer token.");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", StaticBearerToken);
+        return Task.FromResult(request);
     }
 
     private static async Task<IReadOnlyCollection<CurrencyValue>> ParseCurrencyValuesAsync(Stream stream, CancellationToken cancellationToken)
@@ -246,12 +175,32 @@ public sealed class NadpcoMarketDataService(HttpClient httpClient, IConfiguratio
             return [];
         }
 
-        return root.EnumerateArray().Select(item => new CurrencyValue(
-            GetInt(item, "currencyId"),
-            GetString(item, "currencySymbol"),
-            GetString(item, "currencyTitle"),
-            GetDecimal(item, "currencyCloseValue") ?? GetDecimal(item, "closeValue") ?? GetDecimal(item, "value"),
-            GetDate(item, "dateGre") ?? GetDate(item, "updatedAt") ?? GetDate(item, "tradeDateGre"))).ToList();
+        return root.EnumerateArray().Select(item =>
+        {
+            var values = item.TryGetProperty("currencyValues", out var nested) && nested.ValueKind == JsonValueKind.Object ? nested : item;
+            return new CurrencyValue(
+                GetInt(item, "currencyId"),
+                GetString(item, "currencySymbol"),
+                GetString(item, "currencyTitle") is { Length: > 0 } title ? title : GetString(item, "currencyName"),
+                GetDecimal(values, "currencyCloseValue") ?? GetDecimal(values, "closeValue") ?? GetDecimal(values, "value"),
+                GetDate(values, "dateTime") ?? GetDate(values, "dateGre") ?? GetDate(values, "updatedAt") ?? GetDate(values, "tradeDateGre"));
+        }).ToList();
+    }
+
+    private static async Task<NadpcoQuote?> ParseQuoteAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        if (document.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            var first = document.RootElement.EnumerateArray().FirstOrDefault();
+            return first.ValueKind == JsonValueKind.Undefined
+                ? null
+                : first.Deserialize<NadpcoQuote>(JsonOptions);
+        }
+
+        return document.RootElement.ValueKind == JsonValueKind.Object
+            ? document.RootElement.Deserialize<NadpcoQuote>(JsonOptions)
+            : null;
     }
 
     private static string GetString(JsonElement item, string name)

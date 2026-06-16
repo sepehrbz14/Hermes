@@ -175,7 +175,7 @@ app.MapGet("/api/market/instruments/{source}/{sourceId:int}/quote", async (strin
         {
             var quote = await marketData.GetQuoteAsync(sourceId, cancellationToken);
             return quote is null
-                ? Results.NotFound(new ApiError("No real-time trade data was returned for this company."))
+                ? Results.Ok(new MarketInstrument("company", sourceId, "Market Close", "Market Close", "Tehran Stock", null, null, "Market Close"))
                 : Results.Ok(new MarketInstrument("company", sourceId, quote.BourseSymbol, quote.FullTitle, "Tehran Stock", quote.ClosingPrice ?? quote.LastPrice, quote.ClosingPChgPercent, quote.TradeDate));
         }
 
@@ -203,7 +203,7 @@ app.MapGet("/api/market/companies/{companyId:int}/quote", async (int companyId, 
     {
         var quote = await marketData.GetQuoteAsync(companyId, cancellationToken);
         return quote is null
-            ? Results.NotFound(new ApiError("No real-time trade data was returned for this company."))
+            ? Results.Ok(new MarketInstrument("company", companyId, "Market Close", "Market Close", "Tehran Stock", null, null, "Market Close"))
             : Results.Ok(quote);
     }
     catch (Exception ex)
