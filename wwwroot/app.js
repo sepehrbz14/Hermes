@@ -15,8 +15,113 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 const money = (value) => `IRR ${Number(value).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 const pct = (value) => `${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)}%`;
-const displayPrice = (value) => value == null ? "Market Close" : money(value);
-const displayChange = (value) => value == null ? "Market Close" : pct(value);
+const displayPrice = (value) => value == null ? t("marketClose") : money(value);
+const displayChange = (value) => value == null ? t("marketClose") : pct(value);
+
+const translations = {
+  en: {
+    language: "Language", loginTitle: "Log In", signupTitle: "Create Account", remember: "Remember me", forgot: "Forgot Password?", loginSubmit: "Log In to Account", signupSubmit: "Create My Account", orLogin: "Or log in with", orSignup: "Or sign up with", noAccount: "Don't have an account?", haveAccount: "Already have an account?", signUp: "Sign Up", logIn: "Log in", overview: "Overview", holdings: "Holdings", settings: "Settings", cashReady: "Cash ready", signedInAs: "Signed in as", searchHoldings: "Search holdings", addHolding: "Add Holding", logout: "Log out", totalValue: "Total Value", dailyMove: "Daily Move", dividends: "Dividends", riskScore: "Risk Score", recentHoldings: "Recent Holdings", allocation: "Allocation", liveMix: "Live mix", watchlist: "Watchlist", marketSearch: "Market Search", searchMarket: "Search Market", searchPlaceholder: "Search symbol, company, ETF, or currency", stocksEtfsCurrencies: "Stocks, ETFs, currencies", instrument: "Instrument", type: "Type", price: "Price", today: "Today", allHoldings: "All Holdings", editablePortfolio: "Editable portfolio", preferences: "Preferences", backendSynced: "Backend synced", displayName: "Display Name", currency: "Currency", riskStyle: "Risk Style", marketData: "NADPCO Market Data", checkFeed: "Check Feed", searchEmpty: "Search for a stock, ETF, or currency.", watch: "Watch", add: "Add", marketClose: "Market Close", enterManual: "Market Close - enter price manually", dashboardTitle: "Portfolio Overview", dashboardSubtitle: "A focused command center for your Horizon portfolio.", holdingsTitle: "Holdings", holdingsSubtitle: "Search, review, add, or remove Tehran market positions.", settingsTitle: "Settings", settingsSubtitle: "Personalize your Horizon workspace and brokerage connections.", addedHolding: "added to Horizon.", chooseInstrument: "Choose an instrument before saving.", enterPrice: "Enter a valid price before saving.", enterAmount: "Enter a valid amount before saving."
+  },
+  fa: {
+    language: "زبان", loginTitle: "ورود", signupTitle: "ایجاد حساب", remember: "مرا به خاطر بسپار", forgot: "رمز عبور را فراموش کرده‌اید؟", loginSubmit: "ورود به حساب", signupSubmit: "ایجاد حساب من", orLogin: "یا ورود با", orSignup: "یا ثبت‌نام با", noAccount: "حساب کاربری ندارید؟", haveAccount: "قبلاً حساب ساخته‌اید؟", signUp: "ثبت‌نام", logIn: "ورود", overview: "نمای کلی", holdings: "دارایی‌ها", settings: "تنظیمات", cashReady: "وجه نقد آماده", signedInAs: "واردشده با نام", searchHoldings: "جست‌وجوی دارایی‌ها", addHolding: "افزودن دارایی", logout: "خروج", totalValue: "ارزش کل", dailyMove: "تغییر روزانه", dividends: "سود نقدی", riskScore: "امتیاز ریسک", recentHoldings: "دارایی‌های اخیر", allocation: "ترکیب دارایی", liveMix: "ترکیب زنده", watchlist: "فهرست پیگیری", marketSearch: "جست‌وجوی بازار", searchMarket: "جست‌وجوی بازار", searchPlaceholder: "جست‌وجوی نماد، شرکت، صندوق یا ارز", stocksEtfsCurrencies: "سهام، صندوق‌ها و ارزها", instrument: "ابزار", type: "نوع", price: "قیمت", today: "امروز", allHoldings: "همه دارایی‌ها", editablePortfolio: "سبد قابل ویرایش", preferences: "ترجیحات", backendSynced: "همگام با سرور", displayName: "نام نمایشی", currency: "واحد پول", riskStyle: "سبک ریسک", marketData: "داده بازار نادپکو", checkFeed: "بررسی داده", searchEmpty: "برای یافتن سهام، صندوق یا ارز جست‌وجو کنید.", watch: "پیگیری", add: "افزودن", marketClose: "بازار بسته است", enterManual: "بازار بسته است؛ قیمت را دستی وارد کنید", dashboardTitle: "نمای کلی سبد", dashboardSubtitle: "مرکز فرماندهی متمرکز برای مدیریت سبد هورایزن شما.", holdingsTitle: "دارایی‌ها", holdingsSubtitle: "جست‌وجو، بررسی، افزودن یا حذف موقعیت‌های بازار تهران.", settingsTitle: "تنظیمات", settingsSubtitle: "شخصی‌سازی فضای کاری و اتصال‌های بازار هورایزن.", addedHolding: "به هورایزن اضافه شد.", chooseInstrument: "قبل از ذخیره، یک ابزار انتخاب کنید.", enterPrice: "قبل از ذخیره، قیمت معتبر وارد کنید.", enterAmount: "قبل از ذخیره، مقدار معتبر وارد کنید."
+  }
+};
+
+
+Object.assign(translations.en, {
+  emailUser: "Email / Username", password: "Password", fullName: "Full Name", emailAddress: "Email Address", phoneNumber: "Phone Number", confirmPassword: "Confirm Password", amount: "Amount", priceRial: "Price in Rial", purchaseDate: "Purchase Date", assetName: "Asset Name", symbol: "Symbol", saveHolding: "Save Holding", cancel: "Cancel", searchInstrument: "Search Instrument", shares: "Shares", value: "Value", trend: "Trend"
+});
+
+Object.assign(translations.fa, {
+  emailUser: "ایمیل یا نام کاربری", password: "رمز عبور", fullName: "نام و نام خانوادگی", emailAddress: "نشانی ایمیل", phoneNumber: "شماره تلفن", confirmPassword: "تکرار رمز عبور", amount: "مقدار", priceRial: "قیمت به ریال", purchaseDate: "تاریخ خرید", assetName: "نام دارایی", symbol: "نماد", saveHolding: "ذخیره دارایی", cancel: "انصراف", searchInstrument: "جست‌وجوی ابزار", shares: "تعداد", value: "ارزش", trend: "روند"
+});
+
+let currentLanguage = localStorage.getItem("language") || "en";
+const t = (key) => translations[currentLanguage]?.[key] || translations.en[key] || key;
+
+function setText(selector, key) {
+  const element = $(selector);
+  if (element) element.textContent = t(key);
+}
+
+function setPlaceholder(selector, key) {
+  const element = $(selector);
+  if (element) element.placeholder = t(key);
+}
+
+function setInputLabel(selector, key) {
+  const element = $(selector);
+  const label = element?.closest("label") || element;
+  if (!label) return;
+  const textNode = Array.from(label.childNodes).find((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+  if (textNode) textNode.textContent = t(key);
+}
+
+function applyLanguage(language = currentLanguage) {
+  currentLanguage = language;
+  localStorage.setItem("language", language);
+  document.documentElement.lang = language === "fa" ? "fa" : "en";
+  document.body.classList.toggle("rtl", language === "fa");
+  const languageSelect = $("#languageSelect");
+  if (languageSelect) languageSelect.value = language;
+
+  setText(".language-switcher label", "language");
+  setText("#loginCard h2", "loginTitle");
+  setText("#signupCard h2", "signupTitle");
+  setInputLabel("#rememberMe", "remember");
+  setText("#forgotBtn", "forgot");
+  setText("#loginForm .primary-btn", "loginSubmit");
+  setText("#signupForm .primary-btn", "signupSubmit");
+  setText(".nav [data-screen='dashboard']", "overview");
+  setText(".nav [data-screen='holdings']", "holdings");
+  setText(".nav [data-screen='settings']", "settings");
+  setText("#addAssetBtn", "addHolding");
+  setText("#logoutBtn", "logout");
+  setText("#assetModalTitle", "addHolding");
+  setText("#brokerageSync", "checkFeed");
+  setText(".sidebar-card:nth-of-type(1) span", "cashReady");
+  setText(".sidebar-card:nth-of-type(2) span", "signedInAs");
+  setText("#dashboardScreen .metric:nth-child(1) span", "totalValue");
+  setText("#dashboardScreen .metric:nth-child(2) span", "dailyMove");
+  setText("#dashboardScreen .metric:nth-child(3) span", "dividends");
+  setText("#dashboardScreen .metric:nth-child(4) span", "riskScore");
+  setText("#dashboardScreen .panel:nth-of-type(1) h3", "recentHoldings");
+  setText("#dashboardScreen .panel:nth-of-type(2) h3", "allocation");
+  setText("#dashboardScreen .panel:nth-of-type(3) h3", "watchlist");
+  setText("#holdingsScreen .panel:nth-of-type(1) h3", "marketSearch");
+  setText("#holdingsScreen .panel:nth-of-type(1) .section-label", "stocksEtfsCurrencies");
+  setText("#holdingsScreen .panel:nth-of-type(2) h3", "allHoldings");
+  setText("#holdingsScreen .panel:nth-of-type(2) .section-label", "editablePortfolio");
+  setText("#settingsScreen .panel:nth-of-type(1) h3", "preferences");
+  setText("#settingsScreen .panel:nth-of-type(1) .section-label", "backendSynced");
+  setText("#settingsScreen .panel:nth-of-type(2) h3", "marketData");
+  setPlaceholder("#assetSearch", "searchHoldings");
+  setPlaceholder("#marketSearch", "searchPlaceholder");
+  setPlaceholder("#marketCompanySearch", "searchPlaceholder");
+  setPlaceholder("#assetPrice", "enterManual");
+  setPlaceholder("#loginEmail", "emailUser");
+  setPlaceholder("#loginPassword", "password");
+  setPlaceholder("#fullName", "fullName");
+  setPlaceholder("#signupEmail", "emailAddress");
+  setPlaceholder("#phone", "phoneNumber");
+  setPlaceholder("#signupPassword", "password");
+  setPlaceholder("#confirmPassword", "confirmPassword");
+  setInputLabel("#marketCompanySearch", "searchInstrument");
+  setInputLabel("#assetName", "assetName");
+  setInputLabel("#assetTicker", "symbol");
+  setInputLabel("#assetType", "type");
+  setInputLabel("#assetShares", "amount");
+  setInputLabel("#assetPrice", "priceRial");
+  setInputLabel("#assetDate", "purchaseDate");
+  setText("#cancelAsset", "cancel");
+  setText("#assetForm .small-primary", "saveHolding");
+  $$("#holdingsScreen th").forEach((th, index) => {
+    const keys = ["instrument", "type", "price", "today", "", "", "instrument", "type", "shares", "price", "value", "today", "trend", ""];
+    if (keys[index]) th.textContent = t(keys[index]);
+  });
+  setScreen(state.activeScreen || "dashboard");
+  render();
+}
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -270,6 +375,29 @@ function renderWatchlist() {
   `).join("");
 }
 
+function fillAssetFormFromInstrument(instrument) {
+  $("#assetSource").value = instrument.source;
+  $("#assetCompanyId").value = instrument.source === "company" ? instrument.sourceId : "";
+  $("#assetCurrencyId").value = instrument.source === "currency" ? instrument.sourceId : "";
+  $("#assetName").value = instrument.title;
+  $("#assetTicker").value = instrument.symbol;
+  $("#assetType").value = instrument.type === "Tehran Stock" ? "Stock" : instrument.type;
+  $("#assetPrice").value = instrument.price ?? "";
+  $("#assetPrice").placeholder = instrument.price == null ? t("enterManual") : "";
+  if (!$("#assetDate").value) {
+    $("#assetDate").valueAsDate = new Date();
+  }
+}
+
+function openHoldingModal(instrument = null) {
+  if (instrument) {
+    fillAssetFormFromInstrument(instrument);
+  } else if (!$("#assetDate").value) {
+    $("#assetDate").valueAsDate = new Date();
+  }
+  $("#assetModal").classList.remove("hidden");
+}
+
 function renderMarketResults() {
   const target = $("#marketResults");
   if (!target) return;
@@ -279,10 +407,11 @@ function renderMarketResults() {
       <td><div class="asset-cell"><span class="ticker">${escapeHtml(instrument.symbol)}</span><span>${escapeHtml(instrument.title)}</span></div></td>
       <td>${escapeHtml(instrument.type)}</td>
       <td>${displayPrice(instrument.price)}</td>
-      <td class="${instrument.change == null ? "muted" : Number(instrument.change) >= 0 ? "gain" : "loss"}">${instrument.subtitle === "Market Close" ? "Market Close" : displayChange(instrument.change)}</td>
-      <td><button class="small-primary" type="button" data-watch-source="${escapeHtml(instrument.source)}" data-watch-id="${instrument.sourceId}">Watch</button></td>
+      <td class="${instrument.change == null ? "muted" : Number(instrument.change) >= 0 ? "gain" : "loss"}">${instrument.subtitle === "Market Close" ? t("marketClose") : displayChange(instrument.change)}</td>
+      <td><button class="small-primary" type="button" data-add-holding-source="${escapeHtml(instrument.source)}" data-add-holding-id="${instrument.sourceId}">${t("add")}</button></td>
+      <td><button class="small-primary" type="button" data-watch-source="${escapeHtml(instrument.source)}" data-watch-id="${instrument.sourceId}">${t("watch")}</button></td>
     </tr>
-  `).join("") || `<tr><td colspan="5" class="muted">Search for a stock, ETF, or currency.</td></tr>`;
+  `).join("") || `<tr><td colspan="6" class="muted">${t("searchEmpty")}</td></tr>`;
 }
 
 async function searchMarket() {
@@ -309,15 +438,6 @@ async function searchMarket() {
   }
 }
 
-function renderActivity() {
-  $("#activityFeed").innerHTML = state.activity.slice(0, 8).map((item, index) => `
-    <div class="activity-item">
-      <div class="activity-line"><strong>${escapeHtml(item)}</strong><span class="muted">${index === 0 ? "Now" : `${index + 1}h ago`}</span></div>
-      <span class="muted">Horizon recorded this update through the ASP.NET backend.</span>
-    </div>
-  `).join("");
-}
-
 function render() {
   const filtered = getFilteredHoldings();
   renderTable($("#holdingsBody"), filtered);
@@ -326,7 +446,6 @@ function render() {
   renderAllocation();
   renderWatchlist();
   renderMarketResults();
-  renderActivity();
 }
 
 function setScreen(screen) {
@@ -334,14 +453,13 @@ function setScreen(screen) {
   $$(".screen").forEach((el) => el.classList.toggle("active", el.id === `${screen}Screen`));
   $$(".nav button").forEach((btn) => btn.classList.toggle("active", btn.dataset.screen === screen));
   const titles = {
-    dashboard: ["Portfolio Overview", "A focused command center for your Horizon portfolio."],
-    holdings: ["Holdings", "Search, review, add, or remove Tehran market positions."],
-    activity: ["Activity", "Recent portfolio events and rebalance prompts."],
-    settings: ["Settings", "Personalize your Horizon workspace and brokerage connections."]
+    dashboard: [t("dashboardTitle"), t("dashboardSubtitle")],
+    holdings: [t("holdingsTitle"), t("holdingsSubtitle")],
+    settings: [t("settingsTitle"), t("settingsSubtitle")]
   };
   $("#screenTitle").textContent = titles[screen][0];
   $("#screenSubtitle").textContent = titles[screen][1];
-  $("#assetSearch").classList.toggle("hidden", screen === "settings" || screen === "activity");
+  $("#assetSearch").classList.toggle("hidden", screen === "settings");
 }
 
 function passwordScore(value) {
@@ -394,18 +512,10 @@ $("#marketCompanySearch").addEventListener("input", (event) => {
       const selected = state.instruments.find((instrument) => `${instrument.symbol} - ${instrument.title}` === value || instrument.symbol === value);
       if (!selected) return;
 
-      $("#assetSource").value = selected.source;
-      $("#assetCompanyId").value = selected.source === "company" ? selected.sourceId : "";
-      $("#assetCurrencyId").value = selected.source === "currency" ? selected.sourceId : "";
-      $("#assetName").value = selected.title;
-      $("#assetTicker").value = selected.symbol;
-      $("#assetType").value = selected.type === "Tehran Stock" ? "Stock" : selected.type;
-
       const quote = await api(`/api/market/instruments/${selected.source}/${selected.sourceId}/quote`);
       const price = quote.price ?? quote.closingPrice ?? quote.lastPrice ?? selected.price;
-      $("#assetPrice").value = price ?? "";
-      $("#assetPrice").placeholder = price == null ? "Market Close - enter price manually" : "";
-      showToast(price == null ? `${selected.symbol} is Market Close. Enter price manually.` : `${selected.symbol} loaded from NADPCO.`);
+      fillAssetFormFromInstrument({ ...selected, price });
+      showToast(price == null ? `${selected.symbol}: ${t("enterManual")}` : `${selected.symbol} loaded from NADPCO.`);
     } catch (error) {
       showToast(error.message);
     }
@@ -505,12 +615,7 @@ $("#signupForm").addEventListener("submit", async (event) => {
 });
 
 $$(".nav button").forEach((btn) => btn.addEventListener("click", () => setScreen(btn.dataset.screen)));
-$("#addAssetBtn").addEventListener("click", () => {
-  if (!$("#assetDate").value) {
-    $("#assetDate").valueAsDate = new Date();
-  }
-  $("#assetModal").classList.remove("hidden");
-});
+$("#addAssetBtn").addEventListener("click", () => openHoldingModal());
 $("#cancelAsset").addEventListener("click", () => $("#assetModal").classList.add("hidden"));
 $("#assetModal").addEventListener("click", (event) => {
   if (event.target.id === "assetModal") $("#assetModal").classList.add("hidden");
@@ -531,11 +636,15 @@ $("#assetForm").addEventListener("submit", async (event) => {
       currencyId: $("#assetCurrencyId").value ? Number($("#assetCurrencyId").value) : null,
       purchaseDate: $("#assetDate").value || null
     };
+
+    if (!asset.name || !asset.ticker) throw new Error(t("chooseInstrument"));
+    if (!asset.shares || asset.shares <= 0) throw new Error(t("enterAmount"));
+    if (!asset.price || asset.price <= 0) throw new Error(t("enterPrice"));
     await api("/api/portfolio/holdings", { method: "POST", body: JSON.stringify(asset) });
     event.target.reset();
     $("#assetModal").classList.add("hidden");
     await loadPortfolio();
-    showToast(`${asset.ticker} added to Horizon.`);
+    showToast(`${asset.ticker} ${t("addedHolding")}`);
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -544,6 +653,15 @@ $("#assetForm").addEventListener("submit", async (event) => {
 });
 
 document.addEventListener("click", async (event) => {
+  const addHoldingButton = event.target.closest("[data-add-holding-source]");
+  if (addHoldingButton) {
+    const source = addHoldingButton.dataset.addHoldingSource;
+    const sourceId = Number(addHoldingButton.dataset.addHoldingId);
+    const instrument = state.marketResults.find((item) => item.source === source && item.sourceId === sourceId);
+    if (instrument) openHoldingModal(instrument);
+    return;
+  }
+
   const watchButton = event.target.closest("[data-watch-source]");
   if (watchButton) {
     const source = watchButton.dataset.watchSource;
@@ -604,6 +722,9 @@ $("#displayName").addEventListener("change", async (event) => {
     showToast(error.message);
   }
 });
+
+$("#languageSelect").addEventListener("change", (event) => applyLanguage(event.target.value));
+applyLanguage(currentLanguage);
 
 loadPortfolio()
   .then(loadBrokerageStatus)
