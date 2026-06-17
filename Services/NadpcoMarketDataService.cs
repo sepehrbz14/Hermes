@@ -7,6 +7,39 @@ using Hermes.Models;
 
 namespace Hermes.Services;
 
+public sealed record NadpcoDebugEntry(string Method, string Url, string ResponseBody, DateTimeOffset Timestamp);
+
+public sealed class NadpcoDebugLog
+{
+    private const int MaxEntries = 20;
+    private readonly System.Collections.Concurrent.ConcurrentQueue<NadpcoDebugEntry> _entries = new();
+
+    public void Record(string method, string url, string responseBody)
+    {
+        if (!url.Contains("/api/v2/Token", StringComparison.OrdinalIgnoreCase)
+            && !url.Contains("/api/v2/currency/values/rt", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _entries.Enqueue(new NadpcoDebugEntry(method, url, responseBody, DateTimeOffset.UtcNow));
+        while (_entries.Count > MaxEntries && _entries.TryDequeue(out _))
+        {
+        }
+    }
+
+    public IReadOnlyCollection<NadpcoDebugEntry> Drain()
+    {
+        var entries = new List<NadpcoDebugEntry>();
+        while (_entries.TryDequeue(out var entry))
+        {
+            entries.Add(entry);
+        }
+
+        return entries;
+    }
+}
+
 public interface IMarketDataService
 {
     Task<IReadOnlyCollection<MarketCompany>> SearchCompaniesAsync(string? query, int limit, CancellationToken cancellationToken = default);
@@ -15,9 +48,10 @@ public interface IMarketDataService
     Task<IReadOnlyCollection<CurrencyValue>> GetCurrencyValuesAsync(IReadOnlyCollection<int> currencyIds, CancellationToken cancellationToken = default);
     Task<MarketInstrument?> GetCryptoQuoteAsync(int sourceId, CancellationToken cancellationToken = default);
     Task<MarketQuote?> GetQuoteAsync(int companyId, CancellationToken cancellationToken = default);
+    Task EnsureTokenReadyAsync(CancellationToken cancellationToken = default);
 }
 
-public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebHostEnvironment environment, IConfiguration configuration) : IMarketDataService
+public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebHostEnvironment environment, IConfiguration configuration, NadpcoDebugLog debugLog, NadpcoTokenStore tokenStore) : IMarketDataService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -25,9 +59,8 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
         NumberHandling = JsonNumberHandling.AllowReadingFromString
     };
 
-    private const string StaticBearerToken = "E0EE30A995F3C6ED48A038275D81BFEF724A2B0C688E90E2485C0D8B1700BD487B4CC68648F9C280ACA8106BCE2C2CCE8382DC8AA3EA834E6A3747C532BE4C7A";
     private readonly SemaphoreSlim _tokenGate = new(1, 1);
-    private string? _bearerToken = configuration["Nadpco:BearerToken"] ?? StaticBearerToken;
+    private string? _bearerToken = configuration["Nadpco:BearerToken"];
 
     private static readonly string[] CryptoSymbols =
     [
@@ -305,6 +338,18 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
             item.MarketValue);
     }
 
+    public async Task EnsureTokenReadyAsync(CancellationToken cancellationToken = default)
+    {
+        _bearerToken = tokenStore.GetToken();
+        if (string.IsNullOrWhiteSpace(_bearerToken))
+        {
+            _bearerToken = await RequestBearerTokenAsync(cancellationToken);
+            return;
+        }
+
+        await GetCurrencyValuesAsync([84], cancellationToken);
+    }
+
 
     private async Task<IReadOnlyCollection<NadpcoCompany>> GetStaticCompaniesAsync(CancellationToken cancellationToken)
     {
@@ -397,6 +442,7 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
 
         using var response = await httpClient.SendAsync(request, cancellationToken);
         var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+        debugLog.Record(method.Method, request.RequestUri?.ToString() ?? path, responseText);
         if (!response.IsSuccessStatusCode && !IsExpiredToken(responseText))
         {
             response.EnsureSuccessStatusCode();
@@ -420,6 +466,12 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
                 return _bearerToken;
             }
 
+            _bearerToken = tokenStore.GetToken();
+            if (!forceRefresh && !string.IsNullOrWhiteSpace(_bearerToken))
+            {
+                return _bearerToken;
+            }
+
             _bearerToken = await RequestBearerTokenAsync(cancellationToken);
             return _bearerToken;
         }
@@ -431,41 +483,73 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
 
     private async Task<string> RequestBearerTokenAsync(CancellationToken cancellationToken)
     {
-        var username = configuration["Nadpco:Username"] ?? "IOS153183309";
-        var password = configuration["Nadpco:Password"] ?? "OcSQYanxgRNTBIJ";
-        var attempts = new Func<HttpContent>[]
+        var basicCredentials = configuration["Nadpco:BasicAuthorization"] ?? "T1dPMTUzMTg3NzMxOkRiQW5XZ3liVEtnZ0ZaSA==";
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v2/Token");
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Basic", basicCredentials);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+        debugLog.Record("POST", request.RequestUri?.ToString() ?? "/api/v2/Token", responseText);
+
+        var token = NormalizeBearerToken(ExtractToken(responseText));
+        if (response.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(token))
         {
-            () => new StringContent(JsonSerializer.Serialize(new { username, password }, JsonOptions), Encoding.UTF8, "application/json"),
-            () => new StringContent(JsonSerializer.Serialize(new { userName = username, password }, JsonOptions), Encoding.UTF8, "application/json"),
-            () => new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["username"] = username,
-                ["password"] = password
-            })
-        };
-
-        foreach (var createContent in attempts)
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v2/Token");
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            request.Content = createContent();
-
-            using var response = await httpClient.SendAsync(request, cancellationToken);
-            var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                continue;
-            }
-
-            using var document = JsonDocument.Parse(responseText);
-            var token = FindToken(document.RootElement);
-            if (!string.IsNullOrWhiteSpace(token))
-            {
-                return token;
-            }
+            tokenStore.SaveToken(token);
+            _bearerToken = token;
+            return token;
         }
 
-        throw new InvalidOperationException("NADPCO token response did not include a bearer token.");
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"NADPCO token request failed with status {(int)response.StatusCode}. Response: {TrimForError(responseText)}");
+        }
+
+        throw new InvalidOperationException($"NADPCO token response did not include a bearer token. Response: {TrimForError(responseText)}");
+    }
+
+    private static string? ExtractToken(string responseText)
+    {
+        if (string.IsNullOrWhiteSpace(responseText))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(responseText);
+            if (document.RootElement.ValueKind != JsonValueKind.String)
+            {
+                return FindToken(document.RootElement);
+            }
+
+            var token = document.RootElement.GetString();
+            if (token?.TrimStart().StartsWith('{') == true)
+            {
+                return ExtractToken(token);
+            }
+
+            return token;
+        }
+        catch (JsonException)
+        {
+            var token = responseText.Trim().Trim('"');
+            return LooksLikeToken(token) ? token : null;
+        }
+    }
+
+    private static string? NormalizeBearerToken(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return null;
+        }
+
+        token = token.Trim().Trim('"');
+        const string bearerPrefix = "Bearer ";
+        return token.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase)
+            ? token[bearerPrefix.Length..].Trim()
+            : token;
     }
 
     private static string? FindToken(JsonElement element)
@@ -474,14 +558,25 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
         {
             foreach (var property in element.EnumerateObject())
             {
-                if (property.Value.ValueKind == JsonValueKind.String
-                    && (property.Name.Equals("token", StringComparison.OrdinalIgnoreCase)
+                if (property.Value.ValueKind == JsonValueKind.String)
+                {
+                    var value = property.Value.GetString();
+                    if (property.Name.Equals("token", StringComparison.OrdinalIgnoreCase)
                         || property.Name.Equals("accessToken", StringComparison.OrdinalIgnoreCase)
                         || property.Name.Equals("bearerToken", StringComparison.OrdinalIgnoreCase)
                         || property.Name.Equals("access_token", StringComparison.OrdinalIgnoreCase)
-                        || property.Name.Equals("jwt", StringComparison.OrdinalIgnoreCase)))
-                {
-                    return property.Value.GetString();
+                        || property.Name.Equals("jwt", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return value;
+                    }
+
+                    if ((property.Name.Equals("data", StringComparison.OrdinalIgnoreCase)
+                            || property.Name.Equals("result", StringComparison.OrdinalIgnoreCase)
+                            || property.Name.Equals("value", StringComparison.OrdinalIgnoreCase))
+                        && LooksLikeToken(value))
+                    {
+                        return value;
+                    }
                 }
 
                 var nested = FindToken(property.Value);
@@ -503,7 +598,29 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
             }
         }
 
-        return null;
+        return element.ValueKind == JsonValueKind.String && LooksLikeToken(element.GetString())
+            ? element.GetString()
+            : null;
+    }
+
+    private static bool LooksLikeToken(string? value)
+    {
+        value = NormalizeBearerToken(value);
+        return value is { Length: >= 32 }
+            && !value.Contains(' ', StringComparison.Ordinal)
+            && !value.Contains('{', StringComparison.Ordinal)
+            && !value.Contains('}', StringComparison.Ordinal);
+    }
+
+    private static string TrimForError(string? responseText)
+    {
+        if (string.IsNullOrWhiteSpace(responseText))
+        {
+            return "<empty>";
+        }
+
+        responseText = responseText.Trim();
+        return responseText.Length <= 500 ? responseText : responseText[..500];
     }
 
     private static bool IsExpiredToken(string responseText)
@@ -517,8 +634,16 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
         {
             using var document = JsonDocument.Parse(responseText);
             var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
             return (root.TryGetProperty("errorCode", out var code) && code.TryGetInt32(out var errorCode) && errorCode == 1008)
-                || (root.TryGetProperty("errorType", out var type) && string.Equals(type.GetString(), "ExpiredToken", StringComparison.OrdinalIgnoreCase));
+                || (root.TryGetProperty("errorType", out var type) && string.Equals(type.GetString(), "ExpiredToken", StringComparison.OrdinalIgnoreCase))
+                || (root.TryGetProperty("additionalData", out var additionalData)
+                    && additionalData.ValueKind == JsonValueKind.String
+                    && additionalData.GetString()?.Contains("Expired Token", StringComparison.OrdinalIgnoreCase) == true);
         }
         catch (JsonException)
         {

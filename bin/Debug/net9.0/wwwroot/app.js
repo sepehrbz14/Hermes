@@ -8,7 +8,8 @@ const state = {
   marketResults: [],
   user: null,
   summary: null,
-  activeScreen: "dashboard"
+  activeScreen: "dashboard",
+  holdingsDataTable: null
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -129,6 +130,8 @@ async function api(path, options = {}) {
     ...options
   });
 
+  logNadpcoDebug(response);
+
   if (response.status === 204) return null;
 
   const payload = await response.json().catch(() => null);
@@ -137,6 +140,28 @@ async function api(path, options = {}) {
   }
 
   return payload;
+}
+
+function logNadpcoDebug(response) {
+  const debugHeader = response.headers.get("X-Nadpco-Debug");
+  if (!debugHeader) return;
+
+  try {
+    const bytes = Uint8Array.from(atob(debugHeader), (char) => char.charCodeAt(0));
+    const entries = JSON.parse(new TextDecoder().decode(bytes));
+    entries.forEach((entry) => {
+      const method = entry.method ?? entry.Method ?? "UNKNOWN";
+      const url = entry.url ?? entry.Url ?? "UNKNOWN";
+      const responseBody = entry.responseBody ?? entry.ResponseBody ?? "";
+      const timestamp = entry.timestamp ?? entry.Timestamp ?? "";
+      console.groupCollapsed(`[NADPCO debug] ${method} ${url}`);
+      console.log("response body:", responseBody);
+      console.log("timestamp:", timestamp);
+      console.groupEnd();
+    });
+  } catch (error) {
+    console.warn("Could not decode NADPCO debug header", error);
+  }
 }
 
 function escapeHtml(value) {
@@ -174,7 +199,29 @@ async function loadPortfolio() {
     $("#displayName").value = state.user.name || "Investor";
   }
 
+  await refreshHoldingQuotes();
   render();
+}
+
+async function refreshHoldingQuotes() {
+  const refreshed = await Promise.all(state.holdings.map(async (asset) => {
+    const sourceId = asset.sourceId || (asset.source === "currency" ? asset.currencyId : asset.companyId);
+    if (!asset.source || !sourceId) return asset;
+
+    try {
+      const quote = await api(`/api/market/instruments/${asset.source}/${sourceId}/quote`);
+      const livePrice = quote.price ?? quote.closingPrice ?? quote.lastPrice;
+      return livePrice == null ? asset : {
+        ...asset,
+        currentPrice: livePrice,
+        change: Number(asset.price) === 0 ? 0 : (Number(livePrice) - Number(asset.price)) / Number(asset.price) * 100
+      };
+    } catch {
+      return asset;
+    }
+  }));
+
+  state.holdings = refreshed;
 }
 
 async function loadBrokerageStatus() {
@@ -308,8 +355,21 @@ function getFilteredHoldings() {
   );
 }
 
+function currentPrice(asset) {
+  return Number(asset.currentPrice ?? asset.price);
+}
+
 function holdingValue(asset) {
+  return Number(asset.shares) * currentPrice(asset);
+}
+
+function costBasis(asset) {
   return Number(asset.shares) * Number(asset.price);
+}
+
+function holdingGainPercent(asset) {
+  const paid = Number(asset.price);
+  return paid === 0 ? 0 : (currentPrice(asset) - paid) / paid * 100;
 }
 
 function sparkline(change) {
@@ -330,24 +390,27 @@ function renderTable(target, holdings) {
       <td><div class="asset-cell"><span class="ticker">${escapeHtml(asset.ticker)}</span><span>${escapeHtml(asset.name)}</span></div></td>
       <td>${escapeHtml(asset.type)}</td>
       <td>${Number(asset.shares).toLocaleString("en-US")}</td>
-      <td>${money(asset.price)}</td>
-      <td>${money(holdingValue(asset))}</td>
-      <td class="${Number(asset.change) >= 0 ? "gain" : "loss"}">${pct(asset.change)}</td>
-      <td>${sparkline(asset.change)}</td>
-      <td><button class="icon-btn btn" type="button" aria-label="Remove ${escapeHtml(asset.name)}" data-remove-id="${asset.id}">x</button></td>
+      <td><span title="Cost basis: ${money(costBasis(asset))} on ${escapeHtml(asset.purchaseDate || "-")}">${money(asset.price)}</span></td>
+      <td><span title="Current price: ${money(currentPrice(asset))}">${money(holdingValue(asset))}</span></td>
+      <td class="${holdingGainPercent(asset) >= 0 ? "gain" : "loss"}">${pct(holdingGainPercent(asset))}</td>
+      <td>${sparkline(holdingGainPercent(asset))}</td>
+      <td><button class="icon-btn btn" type="button" aria-label="Edit ${escapeHtml(asset.name)}" data-edit-id="${asset.id}">✎</button><button class="icon-btn btn" type="button" aria-label="Remove ${escapeHtml(asset.name)}" data-remove-id="${asset.id}">x</button></td>
     </tr>
   `).join("");
 }
 
 function renderSummary() {
-  const summary = state.summary || {};
-  $("#totalValue").textContent = money(summary.totalValue || 0);
-  $("#dailyMove").textContent = money(summary.dailyMove || 0);
-  $("#dailyPct").textContent = pct(summary.dailyPercent || 0);
-  $("#dailyPct").className = Number(summary.dailyPercent || 0) >= 0 ? "gain" : "loss";
-  $("#totalGain").textContent = pct(summary.totalGainPercent || 0);
+  const invested = state.holdings.reduce((sum, asset) => sum + costBasis(asset), 0);
+  const currentTotal = state.holdings.reduce((sum, asset) => sum + holdingValue(asset), 0);
+  const gainPercent = invested === 0 ? 0 : (currentTotal - invested) / invested * 100;
+  const dailyMove = currentTotal - invested;
+  $("#totalValue").textContent = money(currentTotal);
+  $("#dailyMove").textContent = money(dailyMove);
+  $("#dailyPct").textContent = pct(gainPercent);
+  $("#dailyPct").className = gainPercent >= 0 ? "gain" : "loss";
+  $("#totalGain").textContent = pct(gainPercent);
   $("#holdingsCount").textContent = `${state.holdings.length} assets`;
-  $("#riskScore").textContent = summary.riskScore || 0;
+  $("#riskScore").textContent = state.summary?.riskScore || 0;
 }
 
 function renderAllocation() {
@@ -390,9 +453,11 @@ function fillAssetFormFromInstrument(instrument) {
   $("#assetSource").value = instrument.source;
   $("#assetCompanyId").value = instrument.source === "company" ? instrument.sourceId : "";
   $("#assetCurrencyId").value = instrument.source === "currency" ? instrument.sourceId : "";
+  $("#assetSourceId").value = instrument.sourceId;
   $("#assetName").value = instrument.title;
   $("#assetTicker").value = instrument.symbol;
   $("#assetType").value = instrument.type === "Tehran Stock" ? "Stock" : instrument.type;
+  $("#assetCurrentPrice").value = instrument.price ?? "";
   $("#assetPrice").value = instrument.price ?? "";
   $("#assetPrice").placeholder = instrument.price == null ? t("enterManual") : "";
   if (!$("#assetDate").value) {
@@ -400,14 +465,29 @@ function fillAssetFormFromInstrument(instrument) {
   }
 }
 
-function openHoldingModal(instrument = null) {
-  if (!instrument) {
-    $("#assetForm").reset();
-  }
+function openHoldingModal(instrument = null, holding = null) {
+  $("#assetForm").reset();
+  $("#assetHoldingId").value = "";
+  setText("#assetModalTitle", "addHolding");
 
-  if (instrument) {
+  if (holding) {
+    $("#assetHoldingId").value = holding.id;
+    $("#assetCompanyId").value = holding.companyId || "";
+    $("#assetCurrencyId").value = holding.currencyId || "";
+    $("#assetSource").value = holding.source || "";
+    $("#assetSourceId").value = holding.sourceId || holding.currencyId || holding.companyId || "";
+    $("#assetName").value = holding.name;
+    $("#assetTicker").value = holding.ticker;
+    $("#assetType").value = holding.type;
+    $("#assetShares").value = holding.shares;
+    $("#assetPrice").value = holding.price;
+    $("#assetCurrentPrice").value = holding.currentPrice ?? holding.price;
+    $("#assetDate").value = holding.purchaseDate || "";
+    $("#marketCompanySearch").value = `${holding.ticker} - ${holding.name}`;
+  } else if (instrument) {
     fillAssetFormFromInstrument(instrument);
-  } else if (!$("#assetDate").value) {
+    $("#marketCompanySearch").value = `${instrument.symbol} - ${instrument.title}`;
+  } else {
     $("#assetDate").valueAsDate = new Date();
   }
   $("#assetModal").classList.remove("hidden");
@@ -453,10 +533,26 @@ async function searchMarket() {
   }
 }
 
+function syncHoldingsDataTable() {
+  const table = document.querySelector("#holdingsTableFull");
+  if (!table || !window.DataTable || !state.holdings.length) return;
+
+  if (state.holdingsDataTable) {
+    state.holdingsDataTable.destroy();
+  }
+
+  state.holdingsDataTable = new DataTable(table, {
+    pageLength: 10,
+    responsive: true,
+    order: [[0, "asc"]]
+  });
+}
+
 function render() {
   const filtered = getFilteredHoldings();
   renderTable($("#holdingsBody"), filtered);
   renderTable($("#holdingsBodyFull"), filtered);
+  syncHoldingsDataTable();
   renderSummary();
   renderAllocation();
   renderWatchlist();
@@ -594,13 +690,25 @@ $("#signupPassword").addEventListener("input", (event) => {
   $("#strengthLabel").textContent = score > 70 ? "Password Strength: Strong" : score > 35 ? "Password Strength: Medium" : "Password Strength: Weak";
 });
 
-$("#googleLogin").addEventListener("click", async () => {
-  await enterPortfolioOverviewFromPlaceholder();
-});
+async function startGoogleAuth(mode) {
+  try {
+    const result = await api("/api/auth/google/start", {
+      method: "POST",
+      body: JSON.stringify({ mode })
+    });
 
-$("#googleSignup").addEventListener("click", async () => {
-  await enterPortfolioOverviewFromPlaceholder();
-});
+    if (result.url) {
+      window.location.href = result.url;
+    }
+  } catch (error) {
+    const target = mode === "login" ? "#loginError" : "#signupError";
+    $(target).textContent = error.message;
+  }
+}
+
+$("#googleLogin").addEventListener("click", () => startGoogleAuth("login"));
+
+$("#googleSignup").addEventListener("click", () => startGoogleAuth("signup"));
 
 $("#loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -643,7 +751,7 @@ $("#signupForm").addEventListener("submit", async (event) => {
       body: JSON.stringify({
         name: $("#fullName").value.trim(),
         email: $("#signupEmail").value.trim(),
-        phone: $("#phone").value.trim(),
+        phone: $("#phone").value.trim() ? `${$("#phoneCountryCode").value}${$("#phone").value.trim()}` : "",
         password: $("#signupPassword").value,
         confirmPassword: $("#confirmPassword").value
       })
@@ -675,6 +783,9 @@ $("#assetForm").addEventListener("submit", async (event) => {
       type: $("#assetType").value,
       shares: Number($("#assetShares").value),
       price: Number($("#assetPrice").value),
+      currentPrice: Number($("#assetCurrentPrice").value || $("#assetPrice").value),
+      source: $("#assetSource").value || null,
+      sourceId: $("#assetSourceId").value ? Number($("#assetSourceId").value) : null,
       companyId: $("#assetCompanyId").value ? Number($("#assetCompanyId").value) : null,
       currencyId: $("#assetCurrencyId").value ? Number($("#assetCurrencyId").value) : null,
       purchaseDate: $("#assetDate").value || null
@@ -683,7 +794,8 @@ $("#assetForm").addEventListener("submit", async (event) => {
     if (!asset.name || !asset.ticker) throw new Error(t("chooseInstrument"));
     if (!asset.shares || asset.shares <= 0) throw new Error(t("enterAmount"));
     if (!asset.price || asset.price <= 0) throw new Error(t("enterPrice"));
-    await api("/api/portfolio/holdings", { method: "POST", body: JSON.stringify(asset) });
+    const holdingId = $("#assetHoldingId").value;
+    await api(holdingId ? `/api/portfolio/holdings/${holdingId}` : "/api/portfolio/holdings", { method: holdingId ? "PUT" : "POST", body: JSON.stringify(asset) });
     event.target.reset();
     $("#assetModal").classList.add("hidden");
     await loadPortfolio();
@@ -739,6 +851,13 @@ document.addEventListener("click", async (event) => {
   const openHoldingButton = event.target.closest("[data-open-holding-modal]");
   if (openHoldingButton) {
     openHoldingModal();
+    return;
+  }
+
+  const editButton = event.target.closest("[data-edit-id]");
+  if (editButton) {
+    const asset = state.holdings.find((item) => item.id === editButton.dataset.editId);
+    if (asset) openHoldingModal(null, asset);
     return;
   }
 

@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using Hermes.Models;
 using Hermes.Services;
 
@@ -9,6 +11,8 @@ builder.WebHost.UseWebRoot(Directory.Exists(projectWebRoot) ? projectWebRoot : o
 builder.Services.AddDataProtection();
 builder.Services.AddSingleton<PortfolioStore>();
 builder.Services.AddSingleton<IBrokerageProvider, PlaceholderBrokerageProvider>();
+builder.Services.AddSingleton<NadpcoDebugLog>();
+builder.Services.AddSingleton<NadpcoTokenStore>();
 builder.Services.AddHttpClient<IMarketDataService, NadpcoMarketDataService>((services, client) =>
 {
     var configuration = services.GetRequiredService<IConfiguration>();
@@ -23,6 +27,24 @@ var indexPath = Path.Combine(app.Environment.WebRootPath ?? outputWebRoot, "inde
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
+app.Use(async (context, next) =>
+{
+    var debugLog = context.RequestServices.GetRequiredService<NadpcoDebugLog>();
+    context.Response.OnStarting(() =>
+    {
+        var entries = debugLog.Drain();
+        if (entries.Count > 0)
+        {
+            var json = JsonSerializer.Serialize(entries, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            context.Response.Headers["X-Nadpco-Debug"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
+        }
+
+        return Task.CompletedTask;
+    });
+
+    await next();
+});
+
 app.MapGet("/api/health", () => Results.Ok(new
 {
     status = "ok",
@@ -30,7 +52,7 @@ app.MapGet("/api/health", () => Results.Ok(new
     marketData = "nadpco"
 }));
 
-app.MapPost("/api/auth/login", (LoginRequest request, PortfolioStore store) =>
+app.MapPost("/api/auth/login", async (LoginRequest request, PortfolioStore store, IMarketDataService marketData, CancellationToken cancellationToken) =>
 {
     if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
     {
@@ -43,6 +65,7 @@ app.MapPost("/api/auth/login", (LoginRequest request, PortfolioStore store) =>
     }
 
     var user = store.SignIn(request.Email, request.Password, request.RememberMe);
+    await marketData.EnsureTokenReadyAsync(cancellationToken);
     return Results.Ok(user);
 });
 

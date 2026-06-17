@@ -130,6 +130,8 @@ async function api(path, options = {}) {
     ...options
   });
 
+  logNadpcoDebug(response);
+
   if (response.status === 204) return null;
 
   const payload = await response.json().catch(() => null);
@@ -138,6 +140,28 @@ async function api(path, options = {}) {
   }
 
   return payload;
+}
+
+function logNadpcoDebug(response) {
+  const debugHeader = response.headers.get("X-Nadpco-Debug");
+  if (!debugHeader) return;
+
+  try {
+    const bytes = Uint8Array.from(atob(debugHeader), (char) => char.charCodeAt(0));
+    const entries = JSON.parse(new TextDecoder().decode(bytes));
+    entries.forEach((entry) => {
+      const method = entry.method ?? entry.Method ?? "UNKNOWN";
+      const url = entry.url ?? entry.Url ?? "UNKNOWN";
+      const responseBody = entry.responseBody ?? entry.ResponseBody ?? "";
+      const timestamp = entry.timestamp ?? entry.Timestamp ?? "";
+      console.groupCollapsed(`[NADPCO debug] ${method} ${url}`);
+      console.log("response body:", responseBody);
+      console.log("timestamp:", timestamp);
+      console.groupEnd();
+    });
+  } catch (error) {
+    console.warn("Could not decode NADPCO debug header", error);
+  }
 }
 
 function escapeHtml(value) {
