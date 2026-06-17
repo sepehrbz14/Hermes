@@ -6,6 +6,7 @@ var projectWebRoot = Path.Combine(builder.Environment.ContentRootPath, "wwwroot"
 var outputWebRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
 builder.WebHost.UseWebRoot(Directory.Exists(projectWebRoot) ? projectWebRoot : outputWebRoot);
 
+builder.Services.AddDataProtection();
 builder.Services.AddSingleton<PortfolioStore>();
 builder.Services.AddSingleton<IBrokerageProvider, PlaceholderBrokerageProvider>();
 builder.Services.AddHttpClient<IMarketDataService, NadpcoMarketDataService>((services, client) =>
@@ -41,7 +42,7 @@ app.MapPost("/api/auth/login", (LoginRequest request, PortfolioStore store) =>
         return Results.BadRequest(new ApiError("Password must be at least 4 characters."));
     }
 
-    var user = store.SignIn(request.Email, request.RememberMe);
+    var user = store.SignIn(request.Email, request.Password, request.RememberMe);
     return Results.Ok(user);
 });
 
@@ -62,14 +63,14 @@ app.MapPost("/api/auth/signup", (SignupRequest request, PortfolioStore store) =>
         return Results.BadRequest(new ApiError("Passwords need to match."));
     }
 
-    var user = store.CreateUser(request.Name, request.Email);
+    var user = store.CreateUser(request.Name, request.Email, request.Phone, request.Password);
     return Results.Ok(user);
 });
 
-app.MapPost("/api/auth/google", (PortfolioStore store) =>
+app.MapPost("/api/auth/google/start", (GoogleAuthStartRequest request, PortfolioStore store) =>
 {
-    var user = store.SignInWithGoogle();
-    return Results.Ok(user);
+    var result = store.StartGoogleSignIn(request.Mode);
+    return result.Configured ? Results.Ok(result) : Results.BadRequest(new ApiError(result.Message));
 });
 
 app.MapPost("/api/auth/logout", () => Results.NoContent());
@@ -90,6 +91,24 @@ app.MapPost("/api/portfolio/holdings", (HoldingRequest request, PortfolioStore s
 
     var holding = store.AddHolding(request);
     return Results.Created($"/api/portfolio/holdings/{holding.Id}", holding);
+});
+
+app.MapPut("/api/portfolio/holdings/{id:guid}", (Guid id, HoldingRequest request, PortfolioStore store) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Ticker))
+    {
+        return Results.BadRequest(new ApiError("Asset name and ticker are required."));
+    }
+
+    if (request.Shares <= 0 || request.Price <= 0)
+    {
+        return Results.BadRequest(new ApiError("Shares and price must be greater than zero."));
+    }
+
+    var holding = store.UpdateHolding(id, request);
+    return holding is null
+        ? Results.NotFound(new ApiError("Holding was not found."))
+        : Results.Ok(holding);
 });
 
 app.MapDelete("/api/portfolio/holdings/{id:guid}", (Guid id, PortfolioStore store) =>
@@ -189,11 +208,19 @@ app.MapGet("/api/market/instruments/{source}/{sourceId:int}/quote", async (strin
                 : Results.Ok(new MarketInstrument("currency", sourceId, currency.CurrencySymbol, currency.CurrencyTitle, "Currency", value?.CurrencyCloseValue, 0m, value?.UpdatedAt?.ToString("u") ?? "Priced in Rial"));
         }
 
+        if (source.Equals("crypto", StringComparison.OrdinalIgnoreCase))
+        {
+            var quote = await marketData.GetCryptoQuoteAsync(sourceId, cancellationToken);
+            return quote is null
+                ? Results.NotFound(new ApiError("Crypto instrument was not found."))
+                : Results.Ok(quote);
+        }
+
         return Results.BadRequest(new ApiError("Unknown market instrument source."));
     }
     catch (Exception ex)
     {
-        return Results.Problem($"Could not load NADPCO instrument quote: {ex.Message}");
+        return Results.Problem($"Could not load market instrument quote: {ex.Message}");
     }
 });
 

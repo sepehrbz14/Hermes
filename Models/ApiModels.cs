@@ -14,11 +14,13 @@ public sealed record Holding(
     int? CompanyId,
     int? CurrencyId,
     string Source,
+    int? SourceId,
     string Name,
     string Ticker,
     string Type,
     decimal Shares,
     decimal Price,
+    decimal CurrentPrice,
     decimal Change,
     DateOnly PurchaseDate);
 
@@ -47,6 +49,10 @@ public sealed record PortfolioSnapshot(
 
 public sealed record LoginRequest(string Email, string Password, bool RememberMe);
 
+public sealed record GoogleAuthStart(bool Configured, string? Url, string Message);
+
+public sealed record GoogleAuthStartRequest(string Mode);
+
 public sealed record SignupRequest(
     string Name,
     string Email,
@@ -60,6 +66,9 @@ public sealed record HoldingRequest(
     string Type,
     decimal Shares,
     decimal Price,
+    decimal? CurrentPrice,
+    string? Source,
+    int? SourceId,
     int? CompanyId,
     int? CurrencyId,
     DateOnly? PurchaseDate);
