@@ -369,6 +369,22 @@ async function refreshWatchlistQuotes(button) {
   }
 }
 
+function showFirstLoadingError(results, fallbackMessage) {
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed) {
+    showToast(failed.reason?.message || fallbackMessage);
+  }
+}
+
+async function loadAppData() {
+  const results = await Promise.allSettled([
+    loadPortfolio(),
+    loadBrokerageStatus(),
+    loadMarketLookups()
+  ]);
+  showFirstLoadingError(results, "Some dashboard data could not be loaded right now.");
+}
+
 async function enterApp(user) {
   state.user = user;
   $("#authShell").classList.add("hidden");
@@ -376,9 +392,8 @@ async function enterApp(user) {
   $("#signedInAs").textContent = user?.name || user?.email || "Investor";
   $("#displayName").value = user?.name || "Investor";
   setScreen("dashboard");
-  await loadPortfolio();
-  await loadBrokerageStatus();
-  await loadMarketLookups();
+  render();
+  loadAppData();
 }
 
 async function enterPortfolioOverviewFromPlaceholder() {
@@ -891,13 +906,11 @@ $("#displayName").addEventListener("change", async (event) => {
 $("#languageSelect").addEventListener("change", (event) => applyLanguage(event.target.value));
 applyLanguage(currentLanguage);
 
-loadPortfolio()
-  .then(loadBrokerageStatus)
-  .then(loadMarketLookups)
+loadAppData()
   .then(() => {
     if (state.user) {
       $("#authShell").classList.add("hidden");
       $("#appShell").classList.remove("hidden");
+      setScreen("dashboard");
     }
-  })
-  .catch((error) => showToast(error.message));
+  });
