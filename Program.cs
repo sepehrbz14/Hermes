@@ -34,7 +34,7 @@ app.Use(async (context, next) =>
         var entries = debugLog.Drain();
         if (entries.Count > 0)
         {
-            var json = JsonSerializer.Serialize(entries);
+            var json = JsonSerializer.Serialize(entries, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             context.Response.Headers["X-Nadpco-Debug"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
         }
 

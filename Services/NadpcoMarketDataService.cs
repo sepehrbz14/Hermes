@@ -58,9 +58,8 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
         NumberHandling = JsonNumberHandling.AllowReadingFromString
     };
 
-    private const string StaticBearerToken = "E0EE30A995F3C6ED48A038275D81BFEF724A2B0C688E90E2485C0D8B1700BD487B4CC68648F9C280ACA8106BCE2C2CCE8382DC8AA3EA834E6A3747C532BE4C7A";
     private readonly SemaphoreSlim _tokenGate = new(1, 1);
-    private string? _bearerToken = configuration["Nadpco:BearerToken"] ?? StaticBearerToken;
+    private string? _bearerToken = configuration["Nadpco:BearerToken"];
 
     private static readonly string[] CryptoSymbols =
     [

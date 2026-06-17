@@ -150,9 +150,13 @@ function logNadpcoDebug(response) {
     const bytes = Uint8Array.from(atob(debugHeader), (char) => char.charCodeAt(0));
     const entries = JSON.parse(new TextDecoder().decode(bytes));
     entries.forEach((entry) => {
-      console.groupCollapsed(`[NADPCO debug] ${entry.method} ${entry.url}`);
-      console.log("response body:", entry.responseBody);
-      console.log("timestamp:", entry.timestamp);
+      const method = entry.method ?? entry.Method ?? "UNKNOWN";
+      const url = entry.url ?? entry.Url ?? "UNKNOWN";
+      const responseBody = entry.responseBody ?? entry.ResponseBody ?? "";
+      const timestamp = entry.timestamp ?? entry.Timestamp ?? "";
+      console.groupCollapsed(`[NADPCO debug] ${method} ${url}`);
+      console.log("response body:", responseBody);
+      console.log("timestamp:", timestamp);
       console.groupEnd();
     });
   } catch (error) {
