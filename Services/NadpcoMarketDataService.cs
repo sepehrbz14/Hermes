@@ -17,7 +17,7 @@ public interface IMarketDataService
     Task<MarketQuote?> GetQuoteAsync(int companyId, CancellationToken cancellationToken = default);
 }
 
-public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebHostEnvironment environment) : IMarketDataService
+public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebHostEnvironment environment, IConfiguration configuration) : IMarketDataService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -26,6 +26,8 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
     };
 
     private const string StaticBearerToken = "E0EE30A995F3C6ED48A038275D81BFEF724A2B0C688E90E2485C0D8B1700BD487B4CC68648F9C280ACA8106BCE2C2CCE8382DC8AA3EA834E6A3747C532BE4C7A";
+    private readonly SemaphoreSlim _tokenGate = new(1, 1);
+    private string? _bearerToken = configuration["Nadpco:BearerToken"] ?? StaticBearerToken;
 
     private static readonly string[] CryptoSymbols =
     [
@@ -224,13 +226,14 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
     public async Task<IReadOnlyCollection<CurrencyValue>> GetCurrencyValuesAsync(IReadOnlyCollection<int> currencyIds, CancellationToken cancellationToken = default)
     {
         var ids = currencyIds.Count == 0 ? Array.Empty<int>() : currencyIds.Distinct().ToArray();
-        using var request = await CreateRequestAsync(HttpMethod.Post, "/api/v2/currency/values/rt?IsTimePeriod=false", cancellationToken);
-        request.Content = new StringContent(JsonSerializer.Serialize(new { currencyIds = ids }, JsonOptions), Encoding.UTF8, "application/json");
+        var body = JsonSerializer.Serialize(new { currencyIds = ids }, JsonOptions);
+        var text = await SendNadpcoAsync(
+            HttpMethod.Post,
+            "/api/v2/currency/values/rt?IsTimePeriod=false",
+            () => new StringContent(body, Encoding.UTF8, "application/json"),
+            cancellationToken);
 
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using var stream = ToStream(text);
         var values = await ParseCurrencyValuesAsync(stream, cancellationToken);
         return ids.Length == 0 ? values : values.Where(item => ids.Contains(item.CurrencyId)).ToList();
     }
@@ -270,11 +273,13 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
 
     public async Task<MarketQuote?> GetQuoteAsync(int companyId, CancellationToken cancellationToken = default)
     {
-        using var request = await CreateRequestAsync(HttpMethod.Get, $"/api/v3/TS/RealTimeTradesToday?companyid={companyId}", cancellationToken);
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        var text = await SendNadpcoAsync(
+            HttpMethod.Get,
+            $"/api/v3/TS/RealTimeTradesToday?companyid={companyId}",
+            null,
+            cancellationToken);
 
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using var stream = ToStream(text);
         var item = await ParseQuoteAsync(stream, cancellationToken);
         if (item is null)
         {
@@ -366,13 +371,162 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
         }
     }
 
-    private static Task<HttpRequestMessage> CreateRequestAsync(HttpMethod method, string path, CancellationToken cancellationToken)
+    private async Task<string> SendNadpcoAsync(HttpMethod method, string path, Func<HttpContent>? createContent, CancellationToken cancellationToken)
     {
-        var request = new HttpRequestMessage(method, path);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", StaticBearerToken);
-        return Task.FromResult(request);
+        var responseText = await SendNadpcoOnceAsync(method, path, createContent, await GetBearerTokenAsync(false, cancellationToken), cancellationToken);
+        if (!IsExpiredToken(responseText))
+        {
+            return responseText;
+        }
+
+        responseText = await SendNadpcoOnceAsync(method, path, createContent, await GetBearerTokenAsync(true, cancellationToken), cancellationToken);
+        if (IsExpiredToken(responseText))
+        {
+            throw new InvalidOperationException("NADPCO token refresh succeeded, but the refreshed token is still rejected as expired.");
+        }
+
+        return responseText;
     }
+
+    private async Task<string> SendNadpcoOnceAsync(HttpMethod method, string path, Func<HttpContent>? createContent, string bearerToken, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(method, path);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+        request.Content = createContent?.Invoke();
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode && !IsExpiredToken(responseText))
+        {
+            response.EnsureSuccessStatusCode();
+        }
+
+        return responseText;
+    }
+
+    private async Task<string> GetBearerTokenAsync(bool forceRefresh, CancellationToken cancellationToken)
+    {
+        if (!forceRefresh && !string.IsNullOrWhiteSpace(_bearerToken))
+        {
+            return _bearerToken;
+        }
+
+        await _tokenGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (!forceRefresh && !string.IsNullOrWhiteSpace(_bearerToken))
+            {
+                return _bearerToken;
+            }
+
+            _bearerToken = await RequestBearerTokenAsync(cancellationToken);
+            return _bearerToken;
+        }
+        finally
+        {
+            _tokenGate.Release();
+        }
+    }
+
+    private async Task<string> RequestBearerTokenAsync(CancellationToken cancellationToken)
+    {
+        var username = configuration["Nadpco:Username"] ?? "IOS153183309";
+        var password = configuration["Nadpco:Password"] ?? "OcSQYanxgRNTBIJ";
+        var attempts = new Func<HttpContent>[]
+        {
+            () => new StringContent(JsonSerializer.Serialize(new { username, password }, JsonOptions), Encoding.UTF8, "application/json"),
+            () => new StringContent(JsonSerializer.Serialize(new { userName = username, password }, JsonOptions), Encoding.UTF8, "application/json"),
+            () => new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["username"] = username,
+                ["password"] = password
+            })
+        };
+
+        foreach (var createContent in attempts)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v2/Token");
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            request.Content = createContent();
+
+            using var response = await httpClient.SendAsync(request, cancellationToken);
+            var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                continue;
+            }
+
+            using var document = JsonDocument.Parse(responseText);
+            var token = FindToken(document.RootElement);
+            if (!string.IsNullOrWhiteSpace(token))
+            {
+                return token;
+            }
+        }
+
+        throw new InvalidOperationException("NADPCO token response did not include a bearer token.");
+    }
+
+    private static string? FindToken(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (property.Value.ValueKind == JsonValueKind.String
+                    && (property.Name.Equals("token", StringComparison.OrdinalIgnoreCase)
+                        || property.Name.Equals("accessToken", StringComparison.OrdinalIgnoreCase)
+                        || property.Name.Equals("bearerToken", StringComparison.OrdinalIgnoreCase)
+                        || property.Name.Equals("access_token", StringComparison.OrdinalIgnoreCase)
+                        || property.Name.Equals("jwt", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return property.Value.GetString();
+                }
+
+                var nested = FindToken(property.Value);
+                if (!string.IsNullOrWhiteSpace(nested))
+                {
+                    return nested;
+                }
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                var nested = FindToken(item);
+                if (!string.IsNullOrWhiteSpace(nested))
+                {
+                    return nested;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsExpiredToken(string responseText)
+    {
+        if (string.IsNullOrWhiteSpace(responseText))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(responseText);
+            var root = document.RootElement;
+            return (root.TryGetProperty("errorCode", out var code) && code.TryGetInt32(out var errorCode) && errorCode == 1008)
+                || (root.TryGetProperty("errorType", out var type) && string.Equals(type.GetString(), "ExpiredToken", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static MemoryStream ToStream(string text) => new(Encoding.UTF8.GetBytes(text));
 
     private static async Task<IReadOnlyCollection<CurrencyValue>> ParseCurrencyValuesAsync(Stream stream, CancellationToken cancellationToken)
     {
