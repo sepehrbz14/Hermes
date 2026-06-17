@@ -464,49 +464,27 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
 
     private async Task<string> RequestBearerTokenAsync(CancellationToken cancellationToken)
     {
-        var username = configuration["Nadpco:Username"] ?? "IOS153183309";
-        var password = configuration["Nadpco:Password"] ?? "OcSQYanxgRNTBIJ";
-        var query = $"username={Uri.EscapeDataString(username)}&password={Uri.EscapeDataString(password)}";
-        var attempts = new (string Path, Func<HttpContent?> CreateContent)[]
+        var basicCredentials = configuration["Nadpco:BasicAuthorization"] ?? "SU9TMTUzMTgzMzA5Ok9jU1FZYW54Z1JOVEJJSg==";
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v2/Token");
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Basic", basicCredentials);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+        debugLog.Record("POST", request.RequestUri?.ToString() ?? "/api/v2/Token", responseText);
+
+        var token = NormalizeBearerToken(ExtractToken(responseText));
+        if (response.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(token))
         {
-            ("/api/v2/Token", () => new StringContent(JsonSerializer.Serialize(new { username, password }, JsonOptions), Encoding.UTF8, "application/json")),
-            ("/api/v2/Token", () => new StringContent(JsonSerializer.Serialize(new { userName = username, password }, JsonOptions), Encoding.UTF8, "application/json")),
-            ("/api/v2/Token", () => new StringContent(JsonSerializer.Serialize(new { UserName = username, Password = password }, JsonOptions), Encoding.UTF8, "application/json")),
-            ("/api/v2/Token", () => new StringContent(JsonSerializer.Serialize(new { Username = username, Password = password }, JsonOptions), Encoding.UTF8, "application/json")),
-            ("/api/v2/Token", () => new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["username"] = username,
-                ["password"] = password
-            })),
-            ("/api/v2/Token", () => new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["grant_type"] = "password",
-                ["username"] = username,
-                ["password"] = password
-            })),
-            ($"/api/v2/Token?{query}", () => null)
-        };
-
-        string? lastResponseText = null;
-        foreach (var (path, createContent) in attempts)
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Post, path);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            request.Content = createContent();
-
-            using var response = await httpClient.SendAsync(request, cancellationToken);
-            var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
-            debugLog.Record("POST", request.RequestUri?.ToString() ?? "/api/v2/Token", responseText);
-            lastResponseText = responseText;
-
-            var token = NormalizeBearerToken(ExtractToken(responseText));
-            if (response.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(token))
-            {
-                return token;
-            }
+            return token;
         }
 
-        throw new InvalidOperationException($"NADPCO token response did not include a bearer token. Last response: {TrimForError(lastResponseText)}");
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"NADPCO token request failed with status {(int)response.StatusCode}. Response: {TrimForError(responseText)}");
+        }
+
+        throw new InvalidOperationException($"NADPCO token response did not include a bearer token. Response: {TrimForError(responseText)}");
     }
 
     private static string? ExtractToken(string responseText)
