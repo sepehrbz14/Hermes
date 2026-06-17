@@ -5,22 +5,9 @@ namespace Hermes.Services;
 public sealed class PortfolioStore
 {
     private readonly object _gate = new();
-    private readonly List<Holding> _holdings =
-    [
-        new(Guid.NewGuid(), 3, null, "company", "معدنی و صنعتی چادرملو", "کچاد", "Tehran Stock", 1200m, 2626m, -1.32m, DateOnly.FromDateTime(DateTime.Today)),
-        new(Guid.NewGuid(), 1, null, "company", "کشاورزی و دامپروری مگسال", "زمگسا", "Tehran Stock", 840m, 12540m, .64m, DateOnly.FromDateTime(DateTime.Today)),
-        new(Guid.NewGuid(), 12345, null, "company", "صندوق سرمایه گذاری عیار", "عیار", "ETF", 500m, 10000m, .21m, DateOnly.FromDateTime(DateTime.Today)),
-        new(Guid.NewGuid(), null, 84, "currency", "دلار NerkhApi", "price_usd_nerkhapi", "Currency", 2000m, 1m, 0m, DateOnly.FromDateTime(DateTime.Today)),
-        new(Guid.NewGuid(), null, 85, "currency", "یورو", "price_eur", "Currency", 750m, 1m, 0m, DateOnly.FromDateTime(DateTime.Today))
-    ];
+    private readonly List<Holding> _holdings = [];
 
-    private readonly List<WatchItem> _watchlist =
-    [
-        new("company", 3, "کچاد", "معدنی و صنعتی چادرملو", "Tehran Stock", 2626m, -1.32m),
-        new("company", 1, "زمگسا", "کشاورزی و دامپروری مگسال", "Tehran Stock", 12540m, .64m),
-        new("company", 12345, "عیار", "صندوق سرمایه گذاری عیار", "ETF", 10000m, .21m),
-        new("currency", 84, "price_usd_nerkhapi", "دلار NerkhApi", "Currency", 1m, 0m)
-    ];
+    private readonly List<WatchItem> _watchlist = [];
 
     private readonly List<string> _activity =
     [
