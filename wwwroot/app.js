@@ -379,8 +379,7 @@ function showFirstLoadingError(results, fallbackMessage) {
 async function loadAppData() {
   const results = await Promise.allSettled([
     loadPortfolio(),
-    loadBrokerageStatus(),
-    loadMarketLookups()
+    loadBrokerageStatus()
   ]);
   showFirstLoadingError(results, "Some dashboard data could not be loaded right now.");
 }
@@ -591,6 +590,9 @@ function setScreen(screen) {
   $("#screenTitle").textContent = titles[screen][0];
   $("#screenSubtitle").textContent = titles[screen][1];
   $("#assetSearch").classList.toggle("hidden", screen === "settings");
+  if (screen === "settings" && !state.currencies.length) {
+    loadCurrencies().catch((error) => showToast(error.message));
+  }
 }
 
 function passwordScore(value) {
