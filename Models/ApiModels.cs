@@ -19,6 +19,7 @@ public sealed record Holding(
     string Type,
     decimal Shares,
     decimal Price,
+    decimal CurrentPrice,
     decimal Change,
     DateOnly PurchaseDate);
 
@@ -60,6 +61,7 @@ public sealed record HoldingRequest(
     string Type,
     decimal Shares,
     decimal Price,
+    decimal? CurrentPrice,
     int? CompanyId,
     int? CurrencyId,
     DateOnly? PurchaseDate);

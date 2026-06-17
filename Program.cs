@@ -92,6 +92,24 @@ app.MapPost("/api/portfolio/holdings", (HoldingRequest request, PortfolioStore s
     return Results.Created($"/api/portfolio/holdings/{holding.Id}", holding);
 });
 
+app.MapPut("/api/portfolio/holdings/{id:guid}", (Guid id, HoldingRequest request, PortfolioStore store) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Ticker))
+    {
+        return Results.BadRequest(new ApiError("Asset name and ticker are required."));
+    }
+
+    if (request.Shares <= 0 || request.Price <= 0)
+    {
+        return Results.BadRequest(new ApiError("Shares and price must be greater than zero."));
+    }
+
+    var holding = store.UpdateHolding(id, request);
+    return holding is null
+        ? Results.NotFound(new ApiError("Holding was not found."))
+        : Results.Ok(holding);
+});
+
 app.MapDelete("/api/portfolio/holdings/{id:guid}", (Guid id, PortfolioStore store) =>
 {
     return store.RemoveHolding(id)

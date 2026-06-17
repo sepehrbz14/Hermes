@@ -95,7 +95,8 @@ public sealed class PortfolioStore
             request.Type.Trim(),
             request.Shares,
             request.Price,
-            request.Type.Equals("Currency", StringComparison.OrdinalIgnoreCase) ? 0m : Math.Round(Random.Shared.Next(-200, 201) / 100m, 2),
+            request.CurrentPrice ?? request.Price,
+            CalculateChange(request.Price, request.CurrentPrice ?? request.Price),
             request.PurchaseDate ?? DateOnly.FromDateTime(DateTime.Today));
 
         lock (_gate)
@@ -105,6 +106,39 @@ public sealed class PortfolioStore
         }
 
         return holding;
+    }
+
+    public Holding? UpdateHolding(Guid id, HoldingRequest request)
+    {
+        lock (_gate)
+        {
+            var index = _holdings.FindIndex(item => item.Id == id);
+            if (index < 0)
+            {
+                return null;
+            }
+
+            var existing = _holdings[index];
+            var currentPrice = request.CurrentPrice ?? existing.CurrentPrice;
+            var updated = existing with
+            {
+                CompanyId = request.CompanyId,
+                CurrencyId = request.CurrencyId,
+                Source = request.CurrencyId is not null ? "currency" : "company",
+                Name = request.Name.Trim(),
+                Ticker = request.Ticker.Trim(),
+                Type = request.Type.Trim(),
+                Shares = request.Shares,
+                Price = request.Price,
+                CurrentPrice = currentPrice,
+                Change = CalculateChange(request.Price, currentPrice),
+                PurchaseDate = request.PurchaseDate ?? existing.PurchaseDate
+            };
+
+            _holdings[index] = updated;
+            _activity.Insert(0, $"Updated {updated.Ticker} holding");
+            return updated;
+        }
     }
 
     public bool RemoveHolding(Guid id)
@@ -175,7 +209,12 @@ public sealed class PortfolioStore
         return new PortfolioSummary(total, daily, dailyPercent, 14.82m, riskScore);
     }
 
-    private static decimal HoldingValue(Holding asset) => asset.Shares * asset.Price;
+    private static decimal HoldingValue(Holding asset) => asset.Shares * asset.CurrentPrice;
+
+    private static decimal CalculateChange(decimal purchasePrice, decimal currentPrice)
+    {
+        return purchasePrice == 0 ? 0 : Math.Round((currentPrice - purchasePrice) / purchasePrice * 100m, 2);
+    }
 
     private static string MakeDisplayName(string email)
     {
