@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Hermes.Models;
 
 namespace Hermes.Services;
@@ -14,7 +15,7 @@ public interface IMarketDataService
     Task<MarketQuote?> GetQuoteAsync(int companyId, CancellationToken cancellationToken = default);
 }
 
-public sealed class NadpcoMarketDataService(HttpClient httpClient) : IMarketDataService
+public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebHostEnvironment environment) : IMarketDataService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -25,12 +26,7 @@ public sealed class NadpcoMarketDataService(HttpClient httpClient) : IMarketData
 
     public async Task<IReadOnlyCollection<MarketCompany>> SearchCompaniesAsync(string? query, int limit, CancellationToken cancellationToken = default)
     {
-        using var request = await CreateRequestAsync(HttpMethod.Get, "/api/v3/BaseInfo/Companies", cancellationToken);
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var payload = await JsonSerializer.DeserializeAsync<List<NadpcoCompany>>(stream, JsonOptions, cancellationToken) ?? [];
+        var payload = await GetStaticCompaniesAsync(cancellationToken);
         var normalizedQuery = (query ?? "").Trim();
 
         var companies = payload
@@ -56,15 +52,8 @@ public sealed class NadpcoMarketDataService(HttpClient httpClient) : IMarketData
         return companies;
     }
 
-    public async Task<IReadOnlyCollection<CurrencyItem>> GetCurrencyItemsAsync(CancellationToken cancellationToken = default)
-    {
-        using var request = await CreateRequestAsync(HttpMethod.Get, "/api/v2/Currency/items", cancellationToken);
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        return await JsonSerializer.DeserializeAsync<List<CurrencyItem>>(stream, JsonOptions, cancellationToken) ?? [];
-    }
+    public Task<IReadOnlyCollection<CurrencyItem>> GetCurrencyItemsAsync(CancellationToken cancellationToken = default)
+        => GetStaticCurrenciesAsync(cancellationToken);
 
     public async Task<IReadOnlyCollection<MarketInstrument>> SearchInstrumentsAsync(string? query, int limit, CancellationToken cancellationToken = default)
     {
@@ -146,6 +135,72 @@ public sealed class NadpcoMarketDataService(HttpClient httpClient) : IMarketData
             item.MarketValue);
     }
 
+
+    private async Task<IReadOnlyCollection<NadpcoCompany>> GetStaticCompaniesAsync(CancellationToken cancellationToken)
+    {
+        var path = GetStaticJsonPath("Companies.json");
+        var json = await File.ReadAllTextAsync(path, cancellationToken);
+        return DeserializeStaticCompanies(json);
+    }
+
+    private async Task<IReadOnlyCollection<CurrencyItem>> GetStaticCurrenciesAsync(CancellationToken cancellationToken)
+    {
+        var path = GetStaticJsonPath("Currencies.json");
+        var json = await File.ReadAllTextAsync(path, cancellationToken);
+        return DeserializeStaticCurrencies(json);
+    }
+
+    private string GetStaticJsonPath(string fileName)
+    {
+        var contentRootPath = Path.Combine(environment.ContentRootPath, "JSONS", fileName);
+        return File.Exists(contentRootPath)
+            ? contentRootPath
+            : Path.Combine(AppContext.BaseDirectory, "JSONS", fileName);
+    }
+
+    private static IReadOnlyCollection<NadpcoCompany> DeserializeStaticCompanies(string json)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<List<NadpcoCompany>>(json, JsonOptions) ?? [];
+        }
+        catch (JsonException)
+        {
+            var coIdIndex = json.IndexOf("\\\"coID", StringComparison.Ordinal);
+            if (coIdIndex < 0)
+            {
+                throw;
+            }
+
+            var escapedPayload = json[(coIdIndex - 1)..];
+            var normalized = Regex.Unescape(Regex.Unescape(escapedPayload));
+            var arrayEnd = normalized.LastIndexOf(']');
+            if (arrayEnd >= 0)
+            {
+                normalized = normalized[..(arrayEnd + 1)];
+            }
+
+            return JsonSerializer.Deserialize<List<NadpcoCompany>>("[{" + normalized, JsonOptions) ?? [];
+        }
+    }
+
+    private static IReadOnlyCollection<CurrencyItem> DeserializeStaticCurrencies(string json)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<List<CurrencyItem>>(json, JsonOptions) ?? [];
+        }
+        catch (JsonException)
+        {
+            return CurrencyItemRegex().Matches(json)
+                .Select(match => new CurrencyItem(
+                    int.Parse(match.Groups["id"].Value),
+                    match.Groups["symbol"].Value,
+                    match.Groups["title"].Value))
+                .ToList();
+        }
+    }
+
     private static Task<HttpRequestMessage> CreateRequestAsync(HttpMethod method, string path, CancellationToken cancellationToken)
     {
         var request = new HttpRequestMessage(method, path);
@@ -214,6 +269,9 @@ public sealed class NadpcoMarketDataService(HttpClient httpClient) : IMarketData
 
     private static DateTimeOffset? GetDate(JsonElement item, string name)
         => item.TryGetProperty(name, out var property) && property.TryGetDateTimeOffset(out var value) ? value : null;
+
+    [GeneratedRegex("\\\"currencyId\\\"\\s*:\\s*(?<id>\\d+).*?\\\"currencySymbol\\\"\\s*:\\s*\\\"(?<symbol>[^\\\"\\r\\n]+)\\\".*?\\\"currencyTitle\\\"\\s*:\\s*\\\"(?<title>[^\\\"\\r\\n]+)\\\"", RegexOptions.Singleline)]
+    private static partial Regex CurrencyItemRegex();
 
     private sealed record NadpcoCompany(
         int CoID,
