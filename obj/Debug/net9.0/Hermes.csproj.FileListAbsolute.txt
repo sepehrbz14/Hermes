@@ -30,6 +30,7 @@ C:\Users\admin\OneDrive\Documents\Hermes\bin\Debug\net9.0\wwwroot\index.html
 C:\Users\admin\OneDrive\Documents\Hermes\bin\Debug\net9.0\wwwroot\app.js.gz
 C:\Users\admin\OneDrive\Documents\Hermes\bin\Debug\net9.0\wwwroot\index.html.gz
 C:\Users\admin\OneDrive\Documents\Hermes\bin\Debug\net9.0\appsettings.json
-C:\Users\admin\OneDrive\Documents\Hermes\obj\Debug\net9.0\compressed\owjuke3wfv-xfyxggi057.gz
 C:\Users\admin\OneDrive\Documents\Hermes\obj\Debug\net9.0\staticwebassets.upToDateCheck.txt
-C:\Users\admin\OneDrive\Documents\Hermes\obj\Debug\net9.0\compressed\xfjgyxbx4g-46r98y14yj.gz
+C:\Users\admin\OneDrive\Documents\Hermes\obj\Debug\net9.0\Hermes.sourcelink.json
+C:\Users\admin\OneDrive\Documents\Hermes\obj\Debug\net9.0\compressed\owjuke3wfv-h09oa6s55s.gz
+C:\Users\admin\OneDrive\Documents\Hermes\obj\Debug\net9.0\compressed\xfjgyxbx4g-84m930q9m9.gz
