@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using Hermes.Models;
 using Hermes.Services;
 
@@ -9,6 +11,7 @@ builder.WebHost.UseWebRoot(Directory.Exists(projectWebRoot) ? projectWebRoot : o
 builder.Services.AddDataProtection();
 builder.Services.AddSingleton<PortfolioStore>();
 builder.Services.AddSingleton<IBrokerageProvider, PlaceholderBrokerageProvider>();
+builder.Services.AddSingleton<NadpcoDebugLog>();
 builder.Services.AddHttpClient<IMarketDataService, NadpcoMarketDataService>((services, client) =>
 {
     var configuration = services.GetRequiredService<IConfiguration>();
@@ -22,6 +25,24 @@ var indexPath = Path.Combine(app.Environment.WebRootPath ?? outputWebRoot, "inde
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+
+app.Use(async (context, next) =>
+{
+    var debugLog = context.RequestServices.GetRequiredService<NadpcoDebugLog>();
+    context.Response.OnStarting(() =>
+    {
+        var entries = debugLog.Drain();
+        if (entries.Count > 0)
+        {
+            var json = JsonSerializer.Serialize(entries);
+            context.Response.Headers["X-Nadpco-Debug"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
+        }
+
+        return Task.CompletedTask;
+    });
+
+    await next();
+});
 
 app.MapGet("/api/health", () => Results.Ok(new
 {

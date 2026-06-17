@@ -7,6 +7,39 @@ using Hermes.Models;
 
 namespace Hermes.Services;
 
+public sealed record NadpcoDebugEntry(string Method, string Url, string ResponseBody, DateTimeOffset Timestamp);
+
+public sealed class NadpcoDebugLog
+{
+    private const int MaxEntries = 20;
+    private readonly System.Collections.Concurrent.ConcurrentQueue<NadpcoDebugEntry> _entries = new();
+
+    public void Record(string method, string url, string responseBody)
+    {
+        if (!url.Contains("/api/v2/Token", StringComparison.OrdinalIgnoreCase)
+            && !url.Contains("/api/v2/currency/values/rt", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _entries.Enqueue(new NadpcoDebugEntry(method, url, responseBody, DateTimeOffset.UtcNow));
+        while (_entries.Count > MaxEntries && _entries.TryDequeue(out _))
+        {
+        }
+    }
+
+    public IReadOnlyCollection<NadpcoDebugEntry> Drain()
+    {
+        var entries = new List<NadpcoDebugEntry>();
+        while (_entries.TryDequeue(out var entry))
+        {
+            entries.Add(entry);
+        }
+
+        return entries;
+    }
+}
+
 public interface IMarketDataService
 {
     Task<IReadOnlyCollection<MarketCompany>> SearchCompaniesAsync(string? query, int limit, CancellationToken cancellationToken = default);
@@ -17,7 +50,7 @@ public interface IMarketDataService
     Task<MarketQuote?> GetQuoteAsync(int companyId, CancellationToken cancellationToken = default);
 }
 
-public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebHostEnvironment environment, IConfiguration configuration) : IMarketDataService
+public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebHostEnvironment environment, IConfiguration configuration, NadpcoDebugLog debugLog) : IMarketDataService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -397,6 +430,7 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
 
         using var response = await httpClient.SendAsync(request, cancellationToken);
         var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+        debugLog.Record(method.Method, request.RequestUri?.ToString() ?? path, responseText);
         if (!response.IsSuccessStatusCode && !IsExpiredToken(responseText))
         {
             response.EnsureSuccessStatusCode();
@@ -439,8 +473,15 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
             ("/api/v2/Token", () => new StringContent(JsonSerializer.Serialize(new { username, password }, JsonOptions), Encoding.UTF8, "application/json")),
             ("/api/v2/Token", () => new StringContent(JsonSerializer.Serialize(new { userName = username, password }, JsonOptions), Encoding.UTF8, "application/json")),
             ("/api/v2/Token", () => new StringContent(JsonSerializer.Serialize(new { UserName = username, Password = password }, JsonOptions), Encoding.UTF8, "application/json")),
+            ("/api/v2/Token", () => new StringContent(JsonSerializer.Serialize(new { Username = username, Password = password }, JsonOptions), Encoding.UTF8, "application/json")),
             ("/api/v2/Token", () => new FormUrlEncodedContent(new Dictionary<string, string>
             {
+                ["username"] = username,
+                ["password"] = password
+            })),
+            ("/api/v2/Token", () => new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "password",
                 ["username"] = username,
                 ["password"] = password
             })),
@@ -456,6 +497,7 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
 
             using var response = await httpClient.SendAsync(request, cancellationToken);
             var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+            debugLog.Record("POST", request.RequestUri?.ToString() ?? "/api/v2/Token", responseText);
             lastResponseText = responseText;
 
             var token = NormalizeBearerToken(ExtractToken(responseText));
