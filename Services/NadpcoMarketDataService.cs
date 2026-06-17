@@ -437,6 +437,7 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
         {
             () => new StringContent(JsonSerializer.Serialize(new { username, password }, JsonOptions), Encoding.UTF8, "application/json"),
             () => new StringContent(JsonSerializer.Serialize(new { userName = username, password }, JsonOptions), Encoding.UTF8, "application/json"),
+            () => new StringContent(JsonSerializer.Serialize(new { UserName = username, Password = password }, JsonOptions), Encoding.UTF8, "application/json"),
             () => new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["username"] = username,
@@ -457,7 +458,7 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
                 continue;
             }
 
-            var token = ExtractToken(responseText);
+            var token = NormalizeBearerToken(ExtractToken(responseText));
             if (!string.IsNullOrWhiteSpace(token))
             {
                 return token;
@@ -483,8 +484,23 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
         }
         catch (JsonException)
         {
-            return responseText.Trim().Trim('"');
+            var token = responseText.Trim().Trim('"');
+            return LooksLikeToken(token) ? token : null;
         }
+    }
+
+    private static string? NormalizeBearerToken(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return null;
+        }
+
+        token = token.Trim().Trim('"');
+        const string bearerPrefix = "Bearer ";
+        return token.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase)
+            ? token[bearerPrefix.Length..].Trim()
+            : token;
     }
 
     private static string? FindToken(JsonElement element)
@@ -493,14 +509,25 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
         {
             foreach (var property in element.EnumerateObject())
             {
-                if (property.Value.ValueKind == JsonValueKind.String
-                    && (property.Name.Equals("token", StringComparison.OrdinalIgnoreCase)
+                if (property.Value.ValueKind == JsonValueKind.String)
+                {
+                    var value = property.Value.GetString();
+                    if (property.Name.Equals("token", StringComparison.OrdinalIgnoreCase)
                         || property.Name.Equals("accessToken", StringComparison.OrdinalIgnoreCase)
                         || property.Name.Equals("bearerToken", StringComparison.OrdinalIgnoreCase)
                         || property.Name.Equals("access_token", StringComparison.OrdinalIgnoreCase)
-                        || property.Name.Equals("jwt", StringComparison.OrdinalIgnoreCase)))
-                {
-                    return property.Value.GetString();
+                        || property.Name.Equals("jwt", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return value;
+                    }
+
+                    if ((property.Name.Equals("data", StringComparison.OrdinalIgnoreCase)
+                            || property.Name.Equals("result", StringComparison.OrdinalIgnoreCase)
+                            || property.Name.Equals("value", StringComparison.OrdinalIgnoreCase))
+                        && LooksLikeToken(value))
+                    {
+                        return value;
+                    }
                 }
 
                 var nested = FindToken(property.Value);
@@ -522,7 +549,18 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
             }
         }
 
-        return null;
+        return element.ValueKind == JsonValueKind.String && LooksLikeToken(element.GetString())
+            ? element.GetString()
+            : null;
+    }
+
+    private static bool LooksLikeToken(string? value)
+    {
+        value = NormalizeBearerToken(value);
+        return value is { Length: >= 32 }
+            && !value.Contains(' ', StringComparison.Ordinal)
+            && !value.Contains('{', StringComparison.Ordinal)
+            && !value.Contains('}', StringComparison.Ordinal);
     }
 
     private static bool IsExpiredToken(string responseText)
