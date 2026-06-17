@@ -181,7 +181,7 @@ async function loadPortfolio() {
 
 async function refreshHoldingQuotes() {
   const refreshed = await Promise.all(state.holdings.map(async (asset) => {
-    const sourceId = asset.source === "currency" ? asset.currencyId : asset.companyId;
+    const sourceId = asset.sourceId || (asset.source === "currency" ? asset.currencyId : asset.companyId);
     if (!asset.source || !sourceId) return asset;
 
     try {
@@ -429,6 +429,7 @@ function fillAssetFormFromInstrument(instrument) {
   $("#assetSource").value = instrument.source;
   $("#assetCompanyId").value = instrument.source === "company" ? instrument.sourceId : "";
   $("#assetCurrencyId").value = instrument.source === "currency" ? instrument.sourceId : "";
+  $("#assetSourceId").value = instrument.sourceId;
   $("#assetName").value = instrument.title;
   $("#assetTicker").value = instrument.symbol;
   $("#assetType").value = instrument.type === "Tehran Stock" ? "Stock" : instrument.type;
@@ -450,6 +451,7 @@ function openHoldingModal(instrument = null, holding = null) {
     $("#assetCompanyId").value = holding.companyId || "";
     $("#assetCurrencyId").value = holding.currencyId || "";
     $("#assetSource").value = holding.source || "";
+    $("#assetSourceId").value = holding.sourceId || holding.currencyId || holding.companyId || "";
     $("#assetName").value = holding.name;
     $("#assetTicker").value = holding.ticker;
     $("#assetType").value = holding.type;
@@ -746,6 +748,8 @@ $("#assetForm").addEventListener("submit", async (event) => {
       shares: Number($("#assetShares").value),
       price: Number($("#assetPrice").value),
       currentPrice: Number($("#assetCurrentPrice").value || $("#assetPrice").value),
+      source: $("#assetSource").value || null,
+      sourceId: $("#assetSourceId").value ? Number($("#assetSourceId").value) : null,
       companyId: $("#assetCompanyId").value ? Number($("#assetCompanyId").value) : null,
       currencyId: $("#assetCurrencyId").value ? Number($("#assetCurrencyId").value) : null,
       purchaseDate: $("#assetDate").value || null

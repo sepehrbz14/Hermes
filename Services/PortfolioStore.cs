@@ -89,7 +89,8 @@ public sealed class PortfolioStore
             Guid.NewGuid(),
             request.CompanyId,
             request.CurrencyId,
-            request.CurrencyId is not null ? "currency" : "company",
+            NormalizeSource(request),
+            request.SourceId ?? request.CurrencyId ?? request.CompanyId,
             request.Name.Trim(),
             request.Ticker.Trim(),
             request.Type.Trim(),
@@ -124,7 +125,8 @@ public sealed class PortfolioStore
             {
                 CompanyId = request.CompanyId,
                 CurrencyId = request.CurrencyId,
-                Source = request.CurrencyId is not null ? "currency" : "company",
+                Source = NormalizeSource(request),
+                SourceId = request.SourceId ?? request.CurrencyId ?? request.CompanyId,
                 Name = request.Name.Trim(),
                 Ticker = request.Ticker.Trim(),
                 Type = request.Type.Trim(),
@@ -207,6 +209,16 @@ public sealed class PortfolioStore
         var dailyPercent = total == 0 ? 0 : daily / total * 100m;
         var riskScore = Math.Min(82, Math.Max(22, (int)Math.Round(30 + holdings.Count * 4 + Math.Abs(dailyPercent) * 8)));
         return new PortfolioSummary(total, daily, dailyPercent, 14.82m, riskScore);
+    }
+
+    private static string NormalizeSource(HoldingRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.Source))
+        {
+            return request.Source.Trim().ToLowerInvariant();
+        }
+
+        return request.CurrencyId is not null ? "currency" : "company";
     }
 
     private static decimal HoldingValue(Holding asset) => asset.Shares * asset.CurrentPrice;

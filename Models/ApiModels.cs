@@ -14,6 +14,7 @@ public sealed record Holding(
     int? CompanyId,
     int? CurrencyId,
     string Source,
+    int? SourceId,
     string Name,
     string Ticker,
     string Type,
@@ -62,6 +63,8 @@ public sealed record HoldingRequest(
     decimal Shares,
     decimal Price,
     decimal? CurrentPrice,
+    string? Source,
+    int? SourceId,
     int? CompanyId,
     int? CurrencyId,
     DateOnly? PurchaseDate);

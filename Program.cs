@@ -207,11 +207,19 @@ app.MapGet("/api/market/instruments/{source}/{sourceId:int}/quote", async (strin
                 : Results.Ok(new MarketInstrument("currency", sourceId, currency.CurrencySymbol, currency.CurrencyTitle, "Currency", value?.CurrencyCloseValue, 0m, value?.UpdatedAt?.ToString("u") ?? "Priced in Rial"));
         }
 
+        if (source.Equals("crypto", StringComparison.OrdinalIgnoreCase))
+        {
+            var quote = await marketData.GetCryptoQuoteAsync(sourceId, cancellationToken);
+            return quote is null
+                ? Results.NotFound(new ApiError("Crypto instrument was not found."))
+                : Results.Ok(quote);
+        }
+
         return Results.BadRequest(new ApiError("Unknown market instrument source."));
     }
     catch (Exception ex)
     {
-        return Results.Problem($"Could not load NADPCO instrument quote: {ex.Message}");
+        return Results.Problem($"Could not load market instrument quote: {ex.Message}");
     }
 });
 
