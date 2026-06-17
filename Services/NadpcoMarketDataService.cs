@@ -48,9 +48,10 @@ public interface IMarketDataService
     Task<IReadOnlyCollection<CurrencyValue>> GetCurrencyValuesAsync(IReadOnlyCollection<int> currencyIds, CancellationToken cancellationToken = default);
     Task<MarketInstrument?> GetCryptoQuoteAsync(int sourceId, CancellationToken cancellationToken = default);
     Task<MarketQuote?> GetQuoteAsync(int companyId, CancellationToken cancellationToken = default);
+    Task EnsureTokenReadyAsync(CancellationToken cancellationToken = default);
 }
 
-public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebHostEnvironment environment, IConfiguration configuration, NadpcoDebugLog debugLog) : IMarketDataService
+public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebHostEnvironment environment, IConfiguration configuration, NadpcoDebugLog debugLog, NadpcoTokenStore tokenStore) : IMarketDataService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -337,6 +338,18 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
             item.MarketValue);
     }
 
+    public async Task EnsureTokenReadyAsync(CancellationToken cancellationToken = default)
+    {
+        _bearerToken = tokenStore.GetToken();
+        if (string.IsNullOrWhiteSpace(_bearerToken))
+        {
+            _bearerToken = await RequestBearerTokenAsync(cancellationToken);
+            return;
+        }
+
+        await GetCurrencyValuesAsync([84], cancellationToken);
+    }
+
 
     private async Task<IReadOnlyCollection<NadpcoCompany>> GetStaticCompaniesAsync(CancellationToken cancellationToken)
     {
@@ -453,6 +466,12 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
                 return _bearerToken;
             }
 
+            _bearerToken = tokenStore.GetToken();
+            if (!forceRefresh && !string.IsNullOrWhiteSpace(_bearerToken))
+            {
+                return _bearerToken;
+            }
+
             _bearerToken = await RequestBearerTokenAsync(cancellationToken);
             return _bearerToken;
         }
@@ -464,7 +483,7 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
 
     private async Task<string> RequestBearerTokenAsync(CancellationToken cancellationToken)
     {
-        var basicCredentials = configuration["Nadpco:BasicAuthorization"] ?? "SU9TMTUzMTgzMzA5Ok9jU1FZYW54Z1JOVEJJSg==";
+        var basicCredentials = configuration["Nadpco:BasicAuthorization"] ?? "T1dPMTUzMTg3NzMxOkRiQW5XZ3liVEtnZ0ZaSA==";
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v2/Token");
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", basicCredentials);
@@ -476,6 +495,8 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
         var token = NormalizeBearerToken(ExtractToken(responseText));
         if (response.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(token))
         {
+            tokenStore.SaveToken(token);
+            _bearerToken = token;
             return token;
         }
 

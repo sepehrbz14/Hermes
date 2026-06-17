@@ -12,6 +12,7 @@ builder.Services.AddDataProtection();
 builder.Services.AddSingleton<PortfolioStore>();
 builder.Services.AddSingleton<IBrokerageProvider, PlaceholderBrokerageProvider>();
 builder.Services.AddSingleton<NadpcoDebugLog>();
+builder.Services.AddSingleton<NadpcoTokenStore>();
 builder.Services.AddHttpClient<IMarketDataService, NadpcoMarketDataService>((services, client) =>
 {
     var configuration = services.GetRequiredService<IConfiguration>();
@@ -51,7 +52,7 @@ app.MapGet("/api/health", () => Results.Ok(new
     marketData = "nadpco"
 }));
 
-app.MapPost("/api/auth/login", (LoginRequest request, PortfolioStore store) =>
+app.MapPost("/api/auth/login", async (LoginRequest request, PortfolioStore store, IMarketDataService marketData, CancellationToken cancellationToken) =>
 {
     if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
     {
@@ -64,6 +65,7 @@ app.MapPost("/api/auth/login", (LoginRequest request, PortfolioStore store) =>
     }
 
     var user = store.SignIn(request.Email, request.Password, request.RememberMe);
+    await marketData.EnsureTokenReadyAsync(cancellationToken);
     return Results.Ok(user);
 });
 
