@@ -189,22 +189,123 @@ async function loadBrokerageStatus() {
   `).join("");
 }
 
+const staticLookupCache = {
+  companies: null,
+  currencies: null
+};
+
+async function loadStaticLookup(path, cacheKey, regexFallback) {
+  if (staticLookupCache[cacheKey]) return staticLookupCache[cacheKey];
+
+  const response = await fetch(path, { cache: "force-cache" });
+  if (!response.ok) {
+    throw new Error(`${path} could not be loaded.`);
+  }
+
+  const text = await response.text();
+  try {
+    const parsed = JSON.parse(text);
+    staticLookupCache[cacheKey] = Array.isArray(parsed) ? parsed.filter((item) => item && typeof item === "object") : [];
+  } catch {
+    staticLookupCache[cacheKey] = regexFallback(text);
+  }
+
+  return staticLookupCache[cacheKey];
+}
+
+function parseStaticCompanies(text) {
+  while (text.includes('\\"')) text = text.replaceAll('\\"', '"');
+  text = text.replaceAll('\\n', '\n');
+  const companies = [];
+  const pattern = /\"coID\"\s*:\s*(\d+)[\s\S]*?\"coTitle\"\s*:\s*\"([^\"]*)\"[\s\S]*?\"coSymbol\"\s*:\s*\"([^\"]*)\"[\s\S]*?\"marketTitle\"\s*:\s*\"([^\"]*)\"[\s\S]*?\"precedencyRight\"\s*:\s*(\d+)[\s\S]*?\"fundTypeID\"\s*:\s*(null|\d+)[\s\S]*?\"fundTypeTitle\"\s*:\s*(null|\"([^\"]*)\")/g;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    companies.push({
+      coID: Number(match[1]),
+      coTitle: match[2],
+      coSymbol: match[3],
+      marketTitle: match[4],
+      precedencyRight: Number(match[5]),
+      fundTypeID: match[6] === "null" ? null : Number(match[6]),
+      fundTypeTitle: match[8] || null
+    });
+  }
+  return companies;
+}
+
+function parseStaticCurrencies(text) {
+  while (text.includes('\\"')) text = text.replaceAll('\\"', '"');
+  text = text.replaceAll('\\n', '\n');
+  const currencies = [];
+  const pattern = /"currencyId"\s*:\s*(\d+)[\s\S]*?"currencySymbol"\s*:\s*"([^"]*)"[\s\S]*?"currencyTitle"\s*:\s*"([^"]*)"/g;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    currencies.push({
+      currencyId: Number(match[1]),
+      currencySymbol: match[2],
+      currencyTitle: match[3]
+    });
+  }
+  return currencies;
+}
+
+const matchesLookupQuery = (query, ...values) => {
+  const normalizedQuery = (query || "").trim().toLocaleLowerCase();
+  return !normalizedQuery || values.some((value) => String(value || "").toLocaleLowerCase().includes(normalizedQuery));
+};
+
 async function loadCompanies(query = "") {
-  state.companies = await api(`/api/market/companies?query=${encodeURIComponent(query)}&limit=50`);
-  $("#companyOptions").innerHTML = state.companies.map((company) => `
-    <option value="${escapeHtml(company.bourseSymbol)} - ${escapeHtml(company.fullTitle)}"></option>
-  `).join("");
+  const companies = await loadStaticLookup("/Companies.json", "companies", parseStaticCompanies);
+  state.companies = companies
+    .filter((company) => Number(company.precedencyRight ?? company.PrecedencyRight ?? 0) === 0)
+    .map((company) => ({
+      coId: Number(company.coID ?? company.coId ?? company.CoID),
+      bourseSymbol: company.coSymbol ?? company.bourseSymbol ?? company.CoSymbol ?? company.BourseSymbol ?? "",
+      fullTitle: company.coTitle ?? company.fullTitle ?? company.CoTitle ?? company.FullTitle ?? "",
+      symbolEnglish: company.coSymbolEnglish ?? company.symbolEnglish ?? company.CoSymbolEnglish,
+      marketTitle: company.marketTitle ?? company.MarketTitle,
+      industryTitle: company.industryTitle ?? company.IndustryTitle,
+      isFund: Boolean(company.fundTypeID ?? company.FundTypeID) || String(company.fundTypeTitle ?? company.FundTypeTitle ?? "").includes("صندوق")
+    }))
+    .filter((company) => company.coId && company.bourseSymbol && company.fullTitle)
+    .filter((company) => matchesLookupQuery(query, company.bourseSymbol, company.fullTitle, company.symbolEnglish))
+    .sort((first, second) => Number(second.isFund) - Number(first.isFund) || first.bourseSymbol.localeCompare(second.bourseSymbol))
+    .slice(0, 50);
 }
 
 async function loadInstruments(query = "") {
-  state.instruments = await api(`/api/market/instruments?query=${encodeURIComponent(query)}&limit=50`);
+  await loadCompanies(query);
+  const currencies = (await loadStaticLookup("/Currencies.json", "currencies", parseStaticCurrencies))
+    .filter((currency) => matchesLookupQuery(query, currency.currencySymbol, currency.currencyTitle))
+    .slice(0, 50);
+
+  state.instruments = state.companies.map((company) => ({
+    source: "company",
+    sourceId: company.coId,
+    symbol: company.bourseSymbol,
+    title: company.fullTitle,
+    type: company.isFund ? "ETF" : "Tehran Stock",
+    price: null,
+    change: null,
+    subtitle: company.marketTitle || company.industryTitle
+  })).concat(currencies.map((currency) => ({
+    source: "currency",
+    sourceId: currency.currencyId,
+    symbol: currency.currencySymbol,
+    title: currency.currencyTitle,
+    type: "Currency",
+    price: null,
+    change: 0,
+    subtitle: "Priced in Rial"
+  }))).slice(0, 50);
+
   $("#companyOptions").innerHTML = state.instruments.map((instrument) => `
     <option value="${escapeHtml(instrument.symbol)} - ${escapeHtml(instrument.title)}" label="${escapeHtml(instrument.type)}"></option>
   `).join("");
 }
 
 async function loadCurrencies() {
-  state.currencies = await api("/api/market/currencies");
+  state.currencies = await loadStaticLookup("/Currencies.json", "currencies", parseStaticCurrencies);
   const currencyPicker = $("#currencyPicker");
   if (!currencyPicker) return;
 
