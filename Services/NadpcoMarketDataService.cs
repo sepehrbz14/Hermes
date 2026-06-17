@@ -634,6 +634,11 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
         {
             using var document = JsonDocument.Parse(responseText);
             var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
             return (root.TryGetProperty("errorCode", out var code) && code.TryGetInt32(out var errorCode) && errorCode == 1008)
                 || (root.TryGetProperty("errorType", out var type) && string.Equals(type.GetString(), "ExpiredToken", StringComparison.OrdinalIgnoreCase))
                 || (root.TryGetProperty("additionalData", out var additionalData)
