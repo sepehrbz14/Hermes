@@ -433,39 +433,39 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
     {
         var username = configuration["Nadpco:Username"] ?? "IOS153183309";
         var password = configuration["Nadpco:Password"] ?? "OcSQYanxgRNTBIJ";
-        var attempts = new Func<HttpContent>[]
+        var query = $"username={Uri.EscapeDataString(username)}&password={Uri.EscapeDataString(password)}";
+        var attempts = new (string Path, Func<HttpContent?> CreateContent)[]
         {
-            () => new StringContent(JsonSerializer.Serialize(new { username, password }, JsonOptions), Encoding.UTF8, "application/json"),
-            () => new StringContent(JsonSerializer.Serialize(new { userName = username, password }, JsonOptions), Encoding.UTF8, "application/json"),
-            () => new StringContent(JsonSerializer.Serialize(new { UserName = username, Password = password }, JsonOptions), Encoding.UTF8, "application/json"),
-            () => new FormUrlEncodedContent(new Dictionary<string, string>
+            ("/api/v2/Token", () => new StringContent(JsonSerializer.Serialize(new { username, password }, JsonOptions), Encoding.UTF8, "application/json")),
+            ("/api/v2/Token", () => new StringContent(JsonSerializer.Serialize(new { userName = username, password }, JsonOptions), Encoding.UTF8, "application/json")),
+            ("/api/v2/Token", () => new StringContent(JsonSerializer.Serialize(new { UserName = username, Password = password }, JsonOptions), Encoding.UTF8, "application/json")),
+            ("/api/v2/Token", () => new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["username"] = username,
                 ["password"] = password
-            })
+            })),
+            ($"/api/v2/Token?{query}", () => null)
         };
 
-        foreach (var createContent in attempts)
+        string? lastResponseText = null;
+        foreach (var (path, createContent) in attempts)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v2/Token");
+            using var request = new HttpRequestMessage(HttpMethod.Post, path);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             request.Content = createContent();
 
             using var response = await httpClient.SendAsync(request, cancellationToken);
             var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                continue;
-            }
+            lastResponseText = responseText;
 
             var token = NormalizeBearerToken(ExtractToken(responseText));
-            if (!string.IsNullOrWhiteSpace(token))
+            if (response.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(token))
             {
                 return token;
             }
         }
 
-        throw new InvalidOperationException("NADPCO token response did not include a bearer token.");
+        throw new InvalidOperationException($"NADPCO token response did not include a bearer token. Last response: {TrimForError(lastResponseText)}");
     }
 
     private static string? ExtractToken(string responseText)
@@ -478,9 +478,18 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
         try
         {
             using var document = JsonDocument.Parse(responseText);
-            return document.RootElement.ValueKind == JsonValueKind.String
-                ? document.RootElement.GetString()
-                : FindToken(document.RootElement);
+            if (document.RootElement.ValueKind != JsonValueKind.String)
+            {
+                return FindToken(document.RootElement);
+            }
+
+            var token = document.RootElement.GetString();
+            if (token?.TrimStart().StartsWith('{') == true)
+            {
+                return ExtractToken(token);
+            }
+
+            return token;
         }
         catch (JsonException)
         {
@@ -561,6 +570,17 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
             && !value.Contains(' ', StringComparison.Ordinal)
             && !value.Contains('{', StringComparison.Ordinal)
             && !value.Contains('}', StringComparison.Ordinal);
+    }
+
+    private static string TrimForError(string? responseText)
+    {
+        if (string.IsNullOrWhiteSpace(responseText))
+        {
+            return "<empty>";
+        }
+
+        responseText = responseText.Trim();
+        return responseText.Length <= 500 ? responseText : responseText[..500];
     }
 
     private static bool IsExpiredToken(string responseText)
