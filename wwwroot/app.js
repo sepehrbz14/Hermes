@@ -393,7 +393,7 @@ async function enterApp(user) {
   $("#displayName").value = user?.name || "Investor";
   setScreen("dashboard");
   render();
-  loadAppData();
+  setTimeout(() => loadAppData(), 0);
 }
 
 async function enterPortfolioOverviewFromPlaceholder() {
@@ -906,11 +906,10 @@ $("#displayName").addEventListener("change", async (event) => {
 $("#languageSelect").addEventListener("change", (event) => applyLanguage(event.target.value));
 applyLanguage(currentLanguage);
 
-loadAppData()
+loadPortfolio()
   .then(() => {
     if (state.user) {
-      $("#authShell").classList.add("hidden");
-      $("#appShell").classList.remove("hidden");
-      setScreen("dashboard");
+      enterApp(state.user);
     }
-  });
+  })
+  .catch((error) => showToast(error.message));
