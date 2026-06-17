@@ -666,13 +666,25 @@ $("#signupPassword").addEventListener("input", (event) => {
   $("#strengthLabel").textContent = score > 70 ? "Password Strength: Strong" : score > 35 ? "Password Strength: Medium" : "Password Strength: Weak";
 });
 
-$("#googleLogin").addEventListener("click", async () => {
-  await enterPortfolioOverviewFromPlaceholder();
-});
+async function startGoogleAuth(mode) {
+  try {
+    const result = await api("/api/auth/google/start", {
+      method: "POST",
+      body: JSON.stringify({ mode })
+    });
 
-$("#googleSignup").addEventListener("click", async () => {
-  await enterPortfolioOverviewFromPlaceholder();
-});
+    if (result.url) {
+      window.location.href = result.url;
+    }
+  } catch (error) {
+    const target = mode === "login" ? "#loginError" : "#signupError";
+    $(target).textContent = error.message;
+  }
+}
+
+$("#googleLogin").addEventListener("click", () => startGoogleAuth("login"));
+
+$("#googleSignup").addEventListener("click", () => startGoogleAuth("signup"));
 
 $("#loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -715,7 +727,7 @@ $("#signupForm").addEventListener("submit", async (event) => {
       body: JSON.stringify({
         name: $("#fullName").value.trim(),
         email: $("#signupEmail").value.trim(),
-        phone: $("#phone").value.trim(),
+        phone: $("#phone").value.trim() ? `${$("#phoneCountryCode").value}${$("#phone").value.trim()}` : "",
         password: $("#signupPassword").value,
         confirmPassword: $("#confirmPassword").value
       })

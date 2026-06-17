@@ -1121,8 +1121,15 @@
         <label class="field"><input id="fullName" type="text" autocomplete="name" placeholder="Full Name" required></label>
         <label class="field"><input id="signupEmail" type="email" autocomplete="email" placeholder="Email Address" required></label>
         <label class="field">
-          <span class="phone-code">US <span aria-hidden="true">v</span></span>
-          <input id="phone" type="tel" autocomplete="tel" placeholder="Phone Number" required>
+          <select class="phone-code" id="phoneCountryCode" aria-label="Country code">
+            <option value="+1">US +1</option>
+            <option value="+98">IR +98</option>
+            <option value="+44">UK +44</option>
+            <option value="+49">DE +49</option>
+            <option value="+971">AE +971</option>
+            <option value="+90">TR +90</option>
+          </select>
+          <input id="phone" type="tel" autocomplete="tel" placeholder="Phone Number">
         </label>
         <label class="field"><input id="signupPassword" type="password" autocomplete="new-password" placeholder="Password" required></label>
         <div class="strength-track" aria-hidden="true"><div class="strength-fill" id="strengthFill"></div></div>

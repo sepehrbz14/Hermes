@@ -49,6 +49,10 @@ public sealed record PortfolioSnapshot(
 
 public sealed record LoginRequest(string Email, string Password, bool RememberMe);
 
+public sealed record GoogleAuthStart(bool Configured, string? Url, string Message);
+
+public sealed record GoogleAuthStartRequest(string Mode);
+
 public sealed record SignupRequest(
     string Name,
     string Email,

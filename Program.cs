@@ -6,6 +6,7 @@ var projectWebRoot = Path.Combine(builder.Environment.ContentRootPath, "wwwroot"
 var outputWebRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
 builder.WebHost.UseWebRoot(Directory.Exists(projectWebRoot) ? projectWebRoot : outputWebRoot);
 
+builder.Services.AddDataProtection();
 builder.Services.AddSingleton<PortfolioStore>();
 builder.Services.AddSingleton<IBrokerageProvider, PlaceholderBrokerageProvider>();
 builder.Services.AddHttpClient<IMarketDataService, NadpcoMarketDataService>((services, client) =>
@@ -41,7 +42,7 @@ app.MapPost("/api/auth/login", (LoginRequest request, PortfolioStore store) =>
         return Results.BadRequest(new ApiError("Password must be at least 4 characters."));
     }
 
-    var user = store.SignIn(request.Email, request.RememberMe);
+    var user = store.SignIn(request.Email, request.Password, request.RememberMe);
     return Results.Ok(user);
 });
 
@@ -62,14 +63,14 @@ app.MapPost("/api/auth/signup", (SignupRequest request, PortfolioStore store) =>
         return Results.BadRequest(new ApiError("Passwords need to match."));
     }
 
-    var user = store.CreateUser(request.Name, request.Email);
+    var user = store.CreateUser(request.Name, request.Email, request.Phone, request.Password);
     return Results.Ok(user);
 });
 
-app.MapPost("/api/auth/google", (PortfolioStore store) =>
+app.MapPost("/api/auth/google/start", (GoogleAuthStartRequest request, PortfolioStore store) =>
 {
-    var user = store.SignInWithGoogle();
-    return Results.Ok(user);
+    var result = store.StartGoogleSignIn(request.Mode);
+    return result.Configured ? Results.Ok(result) : Results.BadRequest(new ApiError(result.Message));
 });
 
 app.MapPost("/api/auth/logout", () => Results.NoContent());
