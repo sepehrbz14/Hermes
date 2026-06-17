@@ -457,8 +457,7 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
                 continue;
             }
 
-            using var document = JsonDocument.Parse(responseText);
-            var token = FindToken(document.RootElement);
+            var token = ExtractToken(responseText);
             if (!string.IsNullOrWhiteSpace(token))
             {
                 return token;
@@ -466,6 +465,26 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
         }
 
         throw new InvalidOperationException("NADPCO token response did not include a bearer token.");
+    }
+
+    private static string? ExtractToken(string responseText)
+    {
+        if (string.IsNullOrWhiteSpace(responseText))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(responseText);
+            return document.RootElement.ValueKind == JsonValueKind.String
+                ? document.RootElement.GetString()
+                : FindToken(document.RootElement);
+        }
+        catch (JsonException)
+        {
+            return responseText.Trim().Trim('"');
+        }
     }
 
     private static string? FindToken(JsonElement element)
@@ -518,7 +537,10 @@ public sealed partial class NadpcoMarketDataService(HttpClient httpClient, IWebH
             using var document = JsonDocument.Parse(responseText);
             var root = document.RootElement;
             return (root.TryGetProperty("errorCode", out var code) && code.TryGetInt32(out var errorCode) && errorCode == 1008)
-                || (root.TryGetProperty("errorType", out var type) && string.Equals(type.GetString(), "ExpiredToken", StringComparison.OrdinalIgnoreCase));
+                || (root.TryGetProperty("errorType", out var type) && string.Equals(type.GetString(), "ExpiredToken", StringComparison.OrdinalIgnoreCase))
+                || (root.TryGetProperty("additionalData", out var additionalData)
+                    && additionalData.ValueKind == JsonValueKind.String
+                    && additionalData.GetString()?.Contains("Expired Token", StringComparison.OrdinalIgnoreCase) == true);
         }
         catch (JsonException)
         {
