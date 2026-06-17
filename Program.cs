@@ -1,5 +1,8 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
 using Hermes.Models;
 using Hermes.Services;
 
@@ -9,6 +12,21 @@ var outputWebRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
 builder.WebHost.UseWebRoot(Directory.Exists(projectWebRoot) ? projectWebRoot : outputWebRoot);
 
 builder.Services.AddDataProtection();
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
+})
+.AddCookie()
+.AddGoogle(options =>
+{
+    options.ClientId = builder.Configuration["Authentication:Google:ClientId"]
+        ?? throw new InvalidOperationException("Authentication:Google:ClientId is required.");
+    options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"]
+        ?? throw new InvalidOperationException("Authentication:Google:ClientSecret is required.");
+});
+builder.Services.AddAuthorization();
+builder.Services.AddControllers();
 builder.Services.AddSingleton<PortfolioStore>();
 builder.Services.AddSingleton<IBrokerageProvider, PlaceholderBrokerageProvider>();
 builder.Services.AddSingleton<NadpcoDebugLog>();
@@ -26,6 +44,9 @@ var indexPath = Path.Combine(app.Environment.WebRootPath ?? outputWebRoot, "inde
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.Use(async (context, next) =>
 {
@@ -90,13 +111,16 @@ app.MapPost("/api/auth/signup", (SignupRequest request, PortfolioStore store) =>
     return Results.Ok(user);
 });
 
-app.MapPost("/api/auth/google/start", (GoogleAuthStartRequest request, PortfolioStore store) =>
+app.MapPost("/api/auth/google/start", () => Results.Ok(new GoogleAuthStart(true, "/login-google", "Redirecting to Google sign-in.")));
+
+app.MapPost("/api/auth/logout", async (HttpContext context) =>
 {
-    var result = store.StartGoogleSignIn(request.Mode);
-    return result.Configured ? Results.Ok(result) : Results.BadRequest(new ApiError(result.Message));
+    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.NoContent();
 });
 
-app.MapPost("/api/auth/logout", () => Results.NoContent());
+
+app.MapControllers();
 
 app.MapGet("/api/portfolio", (PortfolioStore store) => Results.Ok(store.GetSnapshot()));
 

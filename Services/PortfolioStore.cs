@@ -108,12 +108,57 @@ public sealed class PortfolioStore
         return user;
     }
 
-    public GoogleAuthStart StartGoogleSignIn(string mode)
+    public UserProfile SignInWithGoogle(string name, string email)
     {
-        return new GoogleAuthStart(
-            false,
-            null,
-            "Google sign-in needs Google OAuth ClientId/ClientSecret configuration before it can be used.");
+        var normalizedEmail = NormalizeEmail(email);
+        using var connection = OpenConnection();
+        using var lookup = new SqlCommand("""
+            SELECT Id, NameProtected, Email, AuthProvider
+            FROM dbo.Users
+            WHERE NormalizedEmail = @email
+            """, connection);
+        lookup.Parameters.AddWithValue("@email", normalizedEmail);
+
+        using (var reader = lookup.ExecuteReader())
+        {
+            if (reader.Read())
+            {
+                var existingUser = new UserProfile(
+                    reader.GetGuid(reader.GetOrdinal("Id")),
+                    Unprotect(GetString(reader, "NameProtected")),
+                    GetString(reader, "Email"),
+                    true,
+                    GetString(reader, "AuthProvider"));
+
+                lock (_gate)
+                {
+                    _user = existingUser;
+                    _activity.Insert(0, $"Signed in with Google as {existingUser.Email}");
+                }
+
+                return existingUser;
+            }
+        }
+
+        var userId = Guid.NewGuid();
+        using var insert = new SqlCommand("""
+            INSERT INTO dbo.Users (Id, NameProtected, Email, NormalizedEmail, PhoneProtected, PasswordHash, PasswordSalt, AuthProvider, CreatedAtUtc)
+            VALUES (@id, @name, @email, @normalizedEmail, NULL, NULL, NULL, 'google', SYSUTCDATETIME())
+            """, connection);
+        insert.Parameters.AddWithValue("@id", userId);
+        insert.Parameters.AddWithValue("@name", Protect(name.Trim()));
+        insert.Parameters.AddWithValue("@email", email.Trim());
+        insert.Parameters.AddWithValue("@normalizedEmail", normalizedEmail);
+        insert.ExecuteNonQuery();
+
+        var user = new UserProfile(userId, name.Trim(), email.Trim(), true, "google");
+        lock (_gate)
+        {
+            _user = user;
+            _activity.Insert(0, $"Created Google account for {user.Email}");
+        }
+
+        return user;
     }
 
     public UserProfile UpdateDisplayName(string name)
