@@ -9,7 +9,8 @@ const state = {
   user: null,
   summary: null,
   activeScreen: "dashboard",
-  holdingsDataTable: null
+  holdingsDataTable: null,
+  marketResultsDataTable: null
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -80,8 +81,6 @@ function applyLanguage(language = currentLanguage) {
   setText("#logoutBtn", "logout");
   setText("#assetModalTitle", "addHolding");
   setText("#brokerageSync", "checkFeed");
-  setText(".sidebar-card:nth-of-type(1) span", "cashReady");
-  setText(".sidebar-card:nth-of-type(2) span", "signedInAs");
   setText("#dashboardScreen .metric:nth-child(1) span", "totalValue");
   setText("#dashboardScreen .metric:nth-child(2) span", "dailyMove");
   setText("#dashboardScreen .metric:nth-child(3) span", "dividends");
@@ -195,7 +194,8 @@ async function loadPortfolio() {
   state.summary = snapshot.summary;
 
   if (state.user) {
-    $("#signedInAs").textContent = state.user.name || state.user.email || "Investor";
+    const signedInAs = $("#signedInAs");
+    if (signedInAs) signedInAs.textContent = state.user.name || state.user.email || "Investor";
     $("#displayName").value = state.user.name || "Investor";
   }
 
@@ -319,7 +319,8 @@ async function enterApp(user) {
   state.user = user;
   $("#authShell").classList.add("hidden");
   $("#appShell").classList.remove("hidden");
-  $("#signedInAs").textContent = user?.name || user?.email || "Investor";
+  const signedInAs = $("#signedInAs");
+  if (signedInAs) signedInAs.textContent = user?.name || user?.email || "Investor";
   $("#displayName").value = user?.name || "Investor";
   setScreen("dashboard");
   await loadPortfolio();
@@ -497,6 +498,11 @@ function renderMarketResults() {
   const target = $("#marketResults");
   if (!target) return;
 
+  if (state.marketResultsDataTable) {
+    state.marketResultsDataTable.destroy();
+    state.marketResultsDataTable = null;
+  }
+
   target.innerHTML = state.marketResults.map((instrument) => `
     <tr>
       <td><div class="asset-cell"><span class="ticker">${escapeHtml(instrument.symbol)}</span><span>${escapeHtml(instrument.title)}</span></div></td>
@@ -507,6 +513,19 @@ function renderMarketResults() {
       <td><button class="small-primary" type="button" data-watch-source="${escapeHtml(instrument.source)}" data-watch-id="${instrument.sourceId}">${t("watch")}</button></td>
     </tr>
   `).join("") || `<tr><td colspan="6" class="muted">${t("searchEmpty")}</td></tr>`;
+
+  syncMarketResultsDataTable();
+}
+
+function syncMarketResultsDataTable() {
+  const table = document.querySelector("#marketResultsTable");
+  if (!table || !window.DataTable || !state.marketResults.length) return;
+
+  state.marketResultsDataTable = new DataTable(table, {
+    pageLength: 10,
+    responsive: true,
+    order: [[0, "asc"]]
+  });
 }
 
 async function searchMarket() {
@@ -899,7 +918,8 @@ $("#displayName").addEventListener("change", async (event) => {
       body: JSON.stringify({ name: event.target.value || "Investor" })
     });
     state.user = user;
-    $("#signedInAs").textContent = user.name;
+    const signedInAs = $("#signedInAs");
+      if (signedInAs) signedInAs.textContent = user.name;
     await loadPortfolio();
   } catch (error) {
     showToast(error.message);
