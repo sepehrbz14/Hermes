@@ -954,6 +954,104 @@
     .modal-search input {
       min-width: 0;
     }
+    .dashboard-screen {
+      gap: 20px;
+    }
+
+    #dashboardScreen {
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .summary-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 20px;
+    }
+
+    .summary-grid .metric:nth-child(n+3) {
+      display: block;
+    }
+
+    .dashboard-grid {
+      grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr);
+      gap: 20px;
+      min-height: 0;
+    }
+
+    .dashboard-grid > .grid,
+    .dashboard-grid .panel {
+      min-height: 0;
+    }
+
+    .metric {
+      min-height: 132px;
+      padding: 22px;
+    }
+
+    .metric strong {
+      font-size: clamp(22px, 2.4vw, 30px);
+    }
+
+    #dashboardScreen .panel {
+      padding: 20px;
+    }
+
+    #dashboardScreen .panel-head {
+      margin-bottom: 12px;
+    }
+
+    #dashboardScreen th,
+    #dashboardScreen td {
+      padding: 10px 8px;
+    }
+
+    #dashboardScreen .ticker {
+      min-width: 48px;
+      height: 36px;
+    }
+
+    #dashboardScreen .empty-state {
+      min-height: 170px;
+    }
+
+    #dashboardScreen .chart-wrap {
+      grid-template-columns: 150px 1fr;
+      gap: 16px;
+    }
+
+    #dashboardScreen .donut {
+      width: 150px;
+    }
+
+    #dashboardScreen .donut::after {
+      inset: 32px;
+    }
+
+    #dashboardScreen .watch-item {
+      padding: 9px 0;
+    }
+
+    #dashboardScreen table {
+      min-width: 640px;
+    }
+
+    #dashboardScreen .table-shell {
+      max-height: 330px;
+      overflow: auto;
+    }
+
+    #marketResultsTable_wrapper {
+      color: #e7e8eb;
+    }
+
+    #marketResultsTable_wrapper .dt-search input,
+    #marketResultsTable_wrapper .dt-length select {
+      border: 1px solid rgba(255, 255, 255, .18);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .06);
+      color: #fff;
+      min-height: 36px;
+    }
+
 
     @media (max-width: 1080px) {
       .auth-shell {
@@ -1163,14 +1261,6 @@
         <button data-screen="holdings">Holdings</button>
         <button data-screen="settings">Settings</button>
       </nav>
-      <div class="sidebar-card">
-        <span>Cash ready</span>
-        <b id="cashReady">$18,450</b>
-      </div>
-      <div class="sidebar-card">
-        <span>Signed in as</span>
-        <b id="signedInAs">Investor</b>
-      </div>
     </aside>
 
     <main class="main">
@@ -1257,7 +1347,7 @@
             </div>
           </label>
           <div class="table-shell">
-            <table>
+            <table id="marketResultsTable">
               <thead>
                 <tr>
                   <th>Instrument</th>
