@@ -1,5 +1,8 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
 using Hermes.Models;
 using Hermes.Services;
 
@@ -9,6 +12,19 @@ var outputWebRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
 builder.WebHost.UseWebRoot(Directory.Exists(projectWebRoot) ? projectWebRoot : outputWebRoot);
 
 builder.Services.AddDataProtection();
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
+})
+.AddCookie()
+.AddGoogle(options =>
+{
+    options.ClientId = GetGoogleCredential(builder.Configuration, "ClientId") ?? string.Empty;
+    options.ClientSecret = GetGoogleCredential(builder.Configuration, "ClientSecret") ?? string.Empty;
+});
+builder.Services.AddAuthorization();
+builder.Services.AddControllers();
 builder.Services.AddSingleton<PortfolioStore>();
 builder.Services.AddSingleton<IBrokerageProvider, PlaceholderBrokerageProvider>();
 builder.Services.AddSingleton<NadpcoDebugLog>();
@@ -26,6 +42,9 @@ var indexPath = Path.Combine(app.Environment.WebRootPath ?? outputWebRoot, "inde
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.Use(async (context, next) =>
 {
@@ -90,13 +109,22 @@ app.MapPost("/api/auth/signup", (SignupRequest request, PortfolioStore store) =>
     return Results.Ok(user);
 });
 
-app.MapPost("/api/auth/google/start", (GoogleAuthStartRequest request, PortfolioStore store) =>
+app.MapPost("/api/auth/google/start", (IConfiguration configuration) =>
 {
-    var result = store.StartGoogleSignIn(request.Mode);
-    return result.Configured ? Results.Ok(result) : Results.BadRequest(new ApiError(result.Message));
+    var configured = HasGoogleCredentials(configuration);
+    return configured
+        ? Results.Ok(new GoogleAuthStart(true, "/login-google", "Redirecting to Google sign-in."))
+        : Results.BadRequest(new ApiError("Google sign-in needs Authentication:Google:ClientId and Authentication:Google:ClientSecret configuration before it can be used."));
 });
 
-app.MapPost("/api/auth/logout", () => Results.NoContent());
+app.MapPost("/api/auth/logout", async (HttpContext context) =>
+{
+    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.NoContent();
+});
+
+
+app.MapControllers();
 
 app.MapGet("/api/portfolio", (PortfolioStore store) => Results.Ok(store.GetSnapshot()));
 
@@ -297,3 +325,10 @@ app.MapFallback(() => File.Exists(indexPath)
     : Results.NotFound(new ApiError("wwwroot/index.html was not found. Build or run the app from the project root.")));
 
 app.Run();
+
+static string? GetGoogleCredential(IConfiguration configuration, string key)
+    => configuration[$"Authentication:Google:{key}"] ?? configuration[$"Google:{key}"];
+
+static bool HasGoogleCredentials(IConfiguration configuration)
+    => !string.IsNullOrWhiteSpace(GetGoogleCredential(configuration, "ClientId"))
+        && !string.IsNullOrWhiteSpace(GetGoogleCredential(configuration, "ClientSecret"));
