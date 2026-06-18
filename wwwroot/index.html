@@ -480,7 +480,8 @@
     }
 
     .summary-grid {
-      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      grid-template-columns: repeat(2, minmax(240px, 1fr));
+      margin-bottom: 30px;
     }
 
     .panel,
@@ -916,11 +917,8 @@
     }
 
     .summary-grid {
-      grid-template-columns: repeat(2, minmax(240px, 1fr));
-    }
-
-    .summary-grid .metric:nth-child(n+3) {
-      display: none;
+      grid-template-columns: repeat(2, minmax(280px, 1fr));
+      margin-bottom: 34px;
     }
 
     .panel {
@@ -963,12 +961,9 @@
     }
 
     .summary-grid {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 20px;
-    }
-
-    .summary-grid .metric:nth-child(n+3) {
-      display: block;
+      grid-template-columns: repeat(2, minmax(280px, 1fr));
+      gap: 24px;
+      margin-bottom: 34px;
     }
 
     .dashboard-grid {
@@ -1280,8 +1275,6 @@
         <div class="grid summary-grid">
           <div class="metric"><span>Total Value</span><strong id="totalValue">$0</strong><em id="totalGain">+0.00%</em></div>
           <div class="metric"><span>Daily Move</span><strong id="dailyMove">$0</strong><em id="dailyPct">+0.00%</em></div>
-          <div class="metric"><span>Dividends</span><strong>$4,820</strong><em>+8.4% forecast</em></div>
-          <div class="metric"><span>Risk Score</span><strong id="riskScore">42</strong><em>Balanced</em></div>
         </div>
 
         <div class="grid dashboard-grid">

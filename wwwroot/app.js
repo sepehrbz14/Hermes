@@ -83,8 +83,6 @@ function applyLanguage(language = currentLanguage) {
   setText("#brokerageSync", "checkFeed");
   setText("#dashboardScreen .metric:nth-child(1) span", "totalValue");
   setText("#dashboardScreen .metric:nth-child(2) span", "dailyMove");
-  setText("#dashboardScreen .metric:nth-child(3) span", "dividends");
-  setText("#dashboardScreen .metric:nth-child(4) span", "riskScore");
   setText("#dashboardScreen .panel:nth-of-type(1) h3", "recentHoldings");
   setText("#dashboardScreen .panel:nth-of-type(2) h3", "allocation");
   setText("#dashboardScreen .panel:nth-of-type(3) h3", "watchlist");
@@ -411,7 +409,6 @@ function renderSummary() {
   $("#dailyPct").className = gainPercent >= 0 ? "gain" : "loss";
   $("#totalGain").textContent = pct(gainPercent);
   $("#holdingsCount").textContent = `${state.holdings.length} assets`;
-  $("#riskScore").textContent = state.summary?.riskScore || 0;
 }
 
 function renderAllocation() {
