@@ -320,6 +320,11 @@ function sparkline(change) {
 }
 
 function renderTable(target, holdings) {
+  if (!holdings.length) {
+    target.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div><p>No holdings to display yet.</p><span class="muted">Add your first holding to see it here.</span><br><button class="small-primary" type="button" data-open-holding-modal>+ ${t("addHolding")}</button></div></div></td></tr>`;
+    return;
+  }
+
   target.innerHTML = holdings.map((asset) => `
     <tr>
       <td><div class="asset-cell"><span class="ticker">${escapeHtml(asset.ticker)}</span><span>${escapeHtml(asset.name)}</span></div></td>
@@ -367,10 +372,16 @@ function renderAllocation() {
 }
 
 function renderWatchlist() {
+  if (!state.watchlist.length) {
+    $("#watchlist").innerHTML = `<div class="empty-state"><div><p>No watchlist instruments yet.</p><span class="muted">Search the market and add instruments you want to follow.</span></div></div>`;
+    return;
+  }
+
   $("#watchlist").innerHTML = state.watchlist.map((item) => `
     <div class="watch-item">
       <div class="watch-line"><strong>${escapeHtml(item.ticker)}</strong><span>${displayPrice(item.price)}</span></div>
       <div class="watch-line muted"><span>${escapeHtml(item.name)}</span><span class="${item.change == null ? "muted" : Number(item.change) >= 0 ? "gain" : "loss"}">${item.marketStatus || displayChange(item.change)}</span></div>
+      <div class="watch-line"><span class="muted">${escapeHtml(item.type)}</span><button class="icon-btn watch-remove" type="button" aria-label="Remove ${escapeHtml(item.name)} from watchlist" data-remove-watch-source="${escapeHtml(item.source)}" data-remove-watch-id="${item.sourceId}">×</button></div>
     </div>
   `).join("");
 }
@@ -390,6 +401,10 @@ function fillAssetFormFromInstrument(instrument) {
 }
 
 function openHoldingModal(instrument = null) {
+  if (!instrument) {
+    $("#assetForm").reset();
+  }
+
   if (instrument) {
     fillAssetFormFromInstrument(instrument);
   } else if (!$("#assetDate").value) {
@@ -502,6 +517,26 @@ $("#brokerageSync").addEventListener("click", async (event) => {
   }
 });
 
+async function searchModalInstrument() {
+  const value = $("#marketCompanySearch").value.trim();
+  if (!value) {
+    showToast(t("chooseInstrument"));
+    return;
+  }
+
+  await loadInstruments(value);
+  const selected = state.instruments.find((instrument) => `${instrument.symbol} - ${instrument.title}` === value || instrument.symbol === value) || state.instruments[0];
+  if (!selected) {
+    showToast("No matching instrument found.");
+    return;
+  }
+
+  const quote = await loadInstrumentQuote(selected).catch(() => ({ ...selected, price: selected.price ?? null, change: selected.change ?? null }));
+  fillAssetFormFromInstrument(quote);
+  $("#marketCompanySearch").value = `${quote.symbol} - ${quote.title}`;
+  showToast(quote.price == null ? `${quote.symbol}: ${t("enterManual")}` : `${quote.symbol} loaded from NADPCO.`);
+}
+
 let companySearchTimer;
 $("#marketCompanySearch").addEventListener("input", (event) => {
   clearTimeout(companySearchTimer);
@@ -520,6 +555,14 @@ $("#marketCompanySearch").addEventListener("input", (event) => {
       showToast(error.message);
     }
   }, 250);
+});
+
+$("#modalInstrumentSearch").addEventListener("click", () => searchModalInstrument().catch((error) => showToast(error.message)));
+$("#marketCompanySearch").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    searchModalInstrument().catch((error) => showToast(error.message));
+  }
 });
 
 const loadCurrencyValueButton = $("#loadCurrencyValue");
@@ -689,6 +732,27 @@ document.addEventListener("click", async (event) => {
       showToast(error.message);
     } finally {
       setBusy(watchButton, false);
+    }
+    return;
+  }
+
+  const openHoldingButton = event.target.closest("[data-open-holding-modal]");
+  if (openHoldingButton) {
+    openHoldingModal();
+    return;
+  }
+
+  const removeWatchButton = event.target.closest("[data-remove-watch-source]");
+  if (removeWatchButton) {
+    setBusy(removeWatchButton, true);
+    try {
+      await api(`/api/portfolio/watchlist/${encodeURIComponent(removeWatchButton.dataset.removeWatchSource)}/${removeWatchButton.dataset.removeWatchId}`, { method: "DELETE" });
+      await loadPortfolio();
+      showToast("Instrument removed from watchlist.");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      setBusy(removeWatchButton, false);
     }
     return;
   }
